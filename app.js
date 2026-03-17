@@ -1,0 +1,975 @@
+// ================================================================
+// APP.JS — Orquestador principal
+// Sin Google Apps Script. Usa DB.js (Supabase) + Parser.js
+// ================================================================
+
+// ----------------------------------------------------------------
+// ESTADO GLOBAL
+// ----------------------------------------------------------------
+let mesActivo        = null;
+let chartTorta       = null;
+let chartTop         = null;
+let chartEvo         = null;
+let sessionUsuario   = null;
+
+// Estado del extracto (filtros y paginación)
+let extractoTodos    = [];   // todos los movimientos del mes sin filtrar
+let extractoPagina   = 1;
+const EXTRACTO_POR_PAGINA = 30;
+
+// ----------------------------------------------------------------
+// PALETA Y CONFIG GLOBAL DE CHART.JS
+// ----------------------------------------------------------------
+const PALETTE = {
+    gold:      '#c9a96e',
+    goldDim:   'rgba(201,169,110,0.15)',
+    cyan:      '#4fc3c3',
+    green:     '#5ecf8c',
+    textMuted: '#5e7080',
+    textMain:  '#eef2f7',
+    border:    'rgba(255,255,255,0.06)',
+    donut: [
+        '#c9a96e','#4fc3c3','#5ecf8c','#a78bfa',
+        '#fb7185','#fbbf24','#60a5fa','#34d399',
+        '#f472b6','#38bdf8','#a3e635','#fb923c',
+        '#e879f9','#94a3b8',
+    ],
+};
+
+Chart.defaults.color                         = PALETTE.textMuted;
+Chart.defaults.font.family                   = "'DM Mono', monospace";
+Chart.defaults.font.size                     = 11;
+Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(8,12,18,0.95)';
+Chart.defaults.plugins.tooltip.borderColor   = 'rgba(201,169,110,0.3)';
+Chart.defaults.plugins.tooltip.borderWidth   = 1;
+Chart.defaults.plugins.tooltip.titleColor    = PALETTE.gold;
+Chart.defaults.plugins.tooltip.bodyColor     = PALETTE.textMain;
+Chart.defaults.plugins.tooltip.padding       = 12;
+Chart.defaults.plugins.tooltip.cornerRadius  = 8;
+Chart.defaults.plugins.tooltip.titleFont     = { family:"'DM Mono',monospace", size:11, weight:'500' };
+Chart.defaults.plugins.tooltip.bodyFont      = { family:"'Playfair Display',serif", size:15, weight:'700' };
+
+// ----------------------------------------------------------------
+// INICIO
+// ----------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', async () => {
+    DB.inicializar();
+
+    // Eventos UI (antes de saber si hay sesión)
+    bindEventos();
+
+    // Escuchar cambios de auth (login / logout / magic link callback)
+    // onAuthStateChange se dispara cuando:
+    //   - El usuario hace click en el magic link (SIGNED_IN con token en URL)
+    //   - Se restaura la sesión desde localStorage
+    //   - Se cierra la sesión
+    DB.escucharCambiosAuth(async (session) => {
+        sessionUsuario = session;
+        if (session) {
+            DB.setUserId(session.user.id);
+            // Limpiar el hash de la URL (#access_token=...) sin recargar
+            if (window.location.hash.includes('access_token')) {
+                history.replaceState(null, '', window.location.pathname);
+            }
+            mostrarApp();
+            await arrancarDashboard();
+        } else {
+            mostrarLogin();
+        }
+    });
+
+    // Verificar sesión existente en localStorage (carga rápida sin esperar email)
+    const session = await DB.obtenerSesion();
+    if (session) {
+        sessionUsuario = session;
+        DB.setUserId(session.user.id);
+        mostrarApp();
+        await arrancarDashboard();
+    } else {
+        // Solo mostrar login si no hay sesión NI token en URL
+        // (el token en URL lo maneja onAuthStateChange arriba)
+        if (!window.location.hash.includes('access_token')) {
+            mostrarLogin();
+        }
+        // Si hay token en URL, mostrar pantalla de carga mientras procesa
+        else {
+            document.getElementById('pantalla-login').style.display = 'none';
+            document.getElementById('pantalla-app').style.display   = 'none';
+        }
+    }
+});
+
+// ----------------------------------------------------------------
+// MOSTRAR / OCULTAR SECCIONES
+// ----------------------------------------------------------------
+function mostrarLogin() {
+    document.getElementById('pantalla-login').style.display = 'flex';
+    document.getElementById('pantalla-app').style.display   = 'none';
+}
+
+function mostrarApp() {
+    document.getElementById('pantalla-login').style.display = 'none';
+    document.getElementById('pantalla-app').style.display   = 'block';
+}
+
+// ----------------------------------------------------------------
+// ARRANCAR DASHBOARD
+// ----------------------------------------------------------------
+async function arrancarDashboard() {
+    mostrarSkeletons();
+
+    try {
+        // Verificar si tiene datos; mostrar banner de migración si no
+        const tieneData = await DB.tieneData();
+        const banner = document.getElementById('banner-migracion');
+        if (banner) {
+            banner.style.display = tieneData ? 'none' : 'flex';
+        }
+
+        if (!tieneData) {
+            ocultarSkeletons();
+            return;
+        }
+
+        // Cargar meses disponibles
+        const meses = await DB.obtenerMeses();
+        if (!meses.length) {
+            ocultarSkeletons();
+            return;
+        }
+
+        // Llenar selector de meses
+        const selector = document.getElementById('selector-mes');
+        selector.innerHTML = '';
+        meses.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value   = m;
+            opt.textContent = formatearMes(m);
+            selector.appendChild(opt);
+        });
+
+        mesActivo = meses[0]; // El más reciente
+        selector.value = mesActivo;
+
+        await cargarMes(mesActivo);
+
+    } catch (err) {
+        console.error('Error al arrancar dashboard:', err);
+        mostrarError('Error al conectar con la base de datos.');
+    }
+}
+
+async function cargarMes(mes) {
+    mesActivo = mes;
+    mostrarSkeletons();
+
+    try {
+        const datos = await DB.obtenerDatosDashboard(mes);
+        dibujarDashboard(datos);
+    } catch (err) {
+        console.error('Error al cargar mes:', err);
+        mostrarError('Error al cargar los datos del mes.');
+    }
+}
+
+// ----------------------------------------------------------------
+// DIBUJAR DASHBOARD
+// ----------------------------------------------------------------
+function dibujarDashboard(datos) {
+    dibujarKPIs(datos.kpis);
+    dibujarDonut(datos.distribucion);
+    dibujarBarras(datos.top10);
+    dibujarLinea(datos.evolucion);
+    dibujarCuotas(datos.cuotas);
+    dibujarExtracto(datos.extracto);
+}
+
+// ----------------------------------------------------------------
+// KPIs
+// ----------------------------------------------------------------
+function dibujarKPIs(kpis) {
+    document.getElementById('val-total').textContent =
+        formatARS(kpis.totalARS);
+    document.getElementById('val-total-usd').textContent =
+        kpis.totalUSD > 0 ? `u$s ${kpis.totalUSD.toFixed(2)}` : '';
+    document.getElementById('val-movimientos').textContent =
+        `${kpis.cantidadMovimientos} movimientos`;
+}
+
+// ----------------------------------------------------------------
+// GRÁFICO DONUT — Distribución por categoría
+// ----------------------------------------------------------------
+function dibujarDonut(distribucion) {
+    const labels = distribucion.map(d => d.categoria);
+    const values = distribucion.map(d => d.total);
+    const total  = values.reduce((a, b) => a + b, 0);
+
+    if (chartTorta) chartTorta.destroy();
+
+    const pluginTextoCenter = {
+        id: 'textoCenter',
+        afterDraw(chart) {
+            const { ctx, chartArea: { width, height, left, top } } = chart;
+            const cx = left + width  / 2;
+            const cy = top  + height / 2;
+            ctx.save();
+            ctx.font         = `700 16px 'Playfair Display', serif`;
+            ctx.fillStyle    = PALETTE.textMain;
+            ctx.textAlign    = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(formatARS(total), cx, cy - 7);
+            ctx.font      = `400 9px 'DM Mono', monospace`;
+            ctx.fillStyle = PALETTE.textMuted;
+            ctx.fillText('TOTAL', cx, cy + 12);
+            ctx.restore();
+        }
+    };
+
+    chartTorta = new Chart(document.getElementById('grafico-torta'), {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{
+                data: values,
+                backgroundColor: PALETTE.donut.slice(0, labels.length),
+                borderWidth: 2,
+                borderColor: '#080c12',
+                hoverBorderWidth: 0,
+                hoverOffset: 8,
+                spacing: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '72%',
+            animation: { duration: 900, easing: 'easeInOutQuart' },
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        boxWidth: 8, boxHeight: 8, borderRadius: 2,
+                        usePointStyle: true, pointStyle: 'rect',
+                        padding: 12, color: PALETTE.textMuted,
+                        font: { size: 11, family: "'DM Mono',monospace" },
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${ctx.label}: ${formatARS(ctx.raw)}`
+                    }
+                }
+            }
+        },
+        plugins: [pluginTextoCenter]
+    });
+}
+
+// ----------------------------------------------------------------
+// GRÁFICO BARRAS — Top 10 comercios
+// ----------------------------------------------------------------
+function dibujarBarras(top10) {
+    const labels = top10.map(t => t.comercio);
+    const values = top10.map(t => t.total);
+    const maxVal = Math.max(...values, 1);
+
+    const colores = values.map((_, i) => {
+        const alpha = 0.9 - (i / values.length) * 0.5;
+        return `rgba(201,169,110,${alpha})`;
+    });
+
+    if (chartTop) chartTop.destroy();
+
+    chartTop = new Chart(document.getElementById('grafico-top'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                data: values,
+                backgroundColor: colores,
+                borderRadius: 4,
+                borderSkipped: 'left',
+                barThickness: 11,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 800, easing: 'easeOutQuart' },
+            layout: { padding: { right: 70 } },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: ctx => ctx[0].label,
+                        label: ctx => ` ${formatARS(ctx.raw)}`,
+                    }
+                },
+                datalabels: {
+                    anchor: 'end', align: 'end',
+                    color: PALETTE.textMuted,
+                    font: { size: 10, family: "'DM Mono',monospace" },
+                    formatter: val => formatARS(val),
+                    offset: 4,
+                }
+            },
+            scales: {
+                x: { display: false, grid: { display: false }, max: maxVal * 1.35 },
+                y: {
+                    grid: { display: false },
+                    border: { display: false },
+                    ticks: {
+                        color: PALETTE.textMuted,
+                        font: { size: 11, family: "'DM Mono',monospace" },
+                    }
+                }
+            }
+        },
+        plugins: [ChartDataLabels]
+    });
+}
+
+// ----------------------------------------------------------------
+// GRÁFICO LÍNEA — Evolución histórica
+// ----------------------------------------------------------------
+function dibujarLinea(evolucion) {
+    const labels = evolucion.map(e => e.etiqueta);
+    const values = evolucion.map(e => e.total);
+
+    if (chartEvo) chartEvo.destroy();
+
+    const ctx      = document.getElementById('grafico-evolucion').getContext('2d');
+    const gradArea = ctx.createLinearGradient(0, 0, 0, 300);
+    gradArea.addColorStop(0,   'rgba(94,207,140,0.20)');
+    gradArea.addColorStop(0.5, 'rgba(79,195,195,0.08)');
+    gradArea.addColorStop(1,   'rgba(94,207,140,0.00)');
+
+    // Plugin punto pulsante en el dato más reciente
+    const pluginPulso = {
+        id: 'pulsoDot',
+        afterDraw(chart) {
+            const meta   = chart.getDatasetMeta(0);
+            const lastIdx = chart.data.datasets[0].data.length - 1;
+            if (lastIdx < 0) return;
+            const point  = meta.data[lastIdx];
+            if (!point) return;
+            const { x, y } = point;
+            const ctx2 = chart.ctx;
+            const t    = ((Date.now() % 1800) / 1800);
+            ctx2.save();
+            ctx2.beginPath();
+            ctx2.arc(x, y, 5 * (1 + t * 1.8), 0, Math.PI * 2);
+            ctx2.strokeStyle = `rgba(94,207,140,${(1 - t) * 0.7})`;
+            ctx2.lineWidth   = 1.5;
+            ctx2.stroke();
+            ctx2.beginPath();
+            ctx2.arc(x, y, 4, 0, Math.PI * 2);
+            ctx2.fillStyle   = PALETTE.green;
+            ctx2.shadowBlur  = 10;
+            ctx2.shadowColor = PALETTE.green;
+            ctx2.fill();
+            ctx2.restore();
+        }
+    };
+
+    chartEvo = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Gasto Total',
+                data: values,
+                borderColor:           'rgba(238,242,247,0.6)',
+                backgroundColor:       gradArea,
+                borderWidth:           1.5,
+                fill:                  true,
+                tension:               0.35,
+                pointRadius:           0,
+                pointHoverRadius:      5,
+                pointHoverBackgroundColor: PALETTE.textMain,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 1000, easing: 'easeInOutQuart' },
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: ctx => ctx[0].label,
+                        label: ctx => ` ${formatARS(ctx.raw)}`,
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    border: { display: false },
+                    ticks: { color: PALETTE.textMuted, font: { size: 10 } }
+                },
+                y: {
+                    grid: { color: PALETTE.border, drawBorder: false },
+                    border: { display: false },
+                    ticks: {
+                        color: PALETTE.textMuted,
+                        font: { size: 10 },
+                        callback: val => formatARS(val, true),
+                        maxTicksLimit: 5,
+                    }
+                }
+            }
+        },
+        plugins: [pluginPulso]
+    });
+
+    // Animar el pulso continuamente
+    const animLoop = () => { if (chartEvo) { chartEvo.draw(); requestAnimationFrame(animLoop); } };
+    requestAnimationFrame(animLoop);
+}
+
+// ----------------------------------------------------------------
+// TABLA CUOTAS
+// ----------------------------------------------------------------
+function dibujarCuotas(cuotas) {
+    const tbody = document.getElementById('cuerpo-cuotas');
+    tbody.innerHTML = '';
+
+    if (!cuotas.length) {
+        tbody.innerHTML = `<tr><td colspan="3" class="tabla-vacia">Sin cuotas pendientes este mes</td></tr>`;
+        return;
+    }
+
+    cuotas.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="comercio-col">${item.comercio}</td>
+            <td style="text-align:center;"><span class="cuota-badge">${item.cuota}</span></td>
+            <td class="monto-tabla">${formatARS(item.monto)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// ----------------------------------------------------------------
+// TABLA EXTRACTO DEL MES — con búsqueda, filtro y paginación
+// ----------------------------------------------------------------
+function dibujarExtracto(extracto) {
+    // Guardar todos los movimientos para el filtrado posterior
+    extractoTodos  = extracto;
+    extractoPagina = 1;
+
+    // Poblar el select de categorías
+    poblarFiltroCategoriasExtracto(extracto);
+
+    // Renderizar con los filtros actuales (vacíos al inicio)
+    renderizarExtractoFiltrado();
+}
+
+function poblarFiltroCategoriasExtracto(extracto) {
+    const select = document.getElementById('extracto-filtro-cat');
+    if (!select) return;
+
+    // Recolectar categorías únicas presentes en el extracto
+    const cats = [...new Set(
+        extracto.map(m => m.categoria || 'A Clasificar')
+    )].sort();
+
+    select.innerHTML = `<option value="">Todas las categorías</option>`;
+    cats.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value       = cat;
+        opt.textContent = cat;
+        select.appendChild(opt);
+    });
+}
+
+function renderizarExtractoFiltrado() {
+    const tbody   = document.getElementById('cuerpo-extracto');
+    const paginEl = document.getElementById('extracto-paginacion');
+    const contador = document.getElementById('extracto-contador');
+    if (!tbody) return;
+
+    // Leer filtros actuales
+    const textoBuscar  = (document.getElementById('extracto-buscar')?.value || '').trim().toLowerCase();
+    const catFiltro    = (document.getElementById('extracto-filtro-cat')?.value || '');
+
+    // Separar gastos y reintegros, mantener orden cronológico
+    const gastos     = extractoTodos.filter(m => !m.es_reintegro);
+    const reintegros = extractoTodos.filter(m =>  m.es_reintegro);
+    let filtrados    = [...gastos, ...reintegros];
+
+    // Aplicar filtro de texto
+    if (textoBuscar) {
+        filtrados = filtrados.filter(m => {
+            const nombre = (m.comercio || m.comercio_crudo || '').toLowerCase();
+            return nombre.includes(textoBuscar);
+        });
+    }
+
+    // Aplicar filtro de categoría
+    if (catFiltro) {
+        filtrados = filtrados.filter(m =>
+            (m.categoria || 'A Clasificar') === catFiltro
+        );
+    }
+
+    // Actualizar contador
+    if (contador) {
+        contador.textContent = filtrados.length === extractoTodos.length
+            ? `${filtrados.length} movimientos`
+            : `${filtrados.length} de ${extractoTodos.length}`;
+    }
+
+    // Paginación
+    const totalPaginas = Math.max(1, Math.ceil(filtrados.length / EXTRACTO_POR_PAGINA));
+    if (extractoPagina > totalPaginas) extractoPagina = totalPaginas;
+
+    const inicio  = (extractoPagina - 1) * EXTRACTO_POR_PAGINA;
+    const pagina  = filtrados.slice(inicio, inicio + EXTRACTO_POR_PAGINA);
+
+    // Renderizar filas
+    tbody.innerHTML = '';
+
+    if (!pagina.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="tabla-vacia">${
+            filtrados.length === 0 && extractoTodos.length > 0
+                ? 'No hay movimientos que coincidan con el filtro'
+                : 'Sin movimientos este mes'
+        }</td></tr>`;
+    } else {
+        pagina.forEach(mov => {
+            const nombre    = mov.comercio || mov.comercio_crudo;
+            const categoria = mov.categoria || 'A Clasificar';
+            const colorCat  = obtenerColorCategoria(categoria);
+
+            const montoARS = mov.monto_ars !== null
+                ? `<span class="${mov.es_reintegro ? 'monto-reintegro' : 'monto-tabla'}">${formatARS(mov.monto_ars)}</span>`
+                : `<span style="color:var(--text-dim)">—</span>`;
+
+            const montoUSD = mov.monto_usd !== null
+                ? `<span class="monto-usd">u$s ${parseFloat(mov.monto_usd).toFixed(2)}</span>`
+                : `<span style="color:var(--text-dim)">—</span>`;
+
+            let cuotaInfo = '';
+            if (mov.cuota_actual && mov.cuota_total) {
+                cuotaInfo = ` <span class="cuota-badge">${mov.cuota_actual}/${mov.cuota_total}</span>`;
+            }
+
+            const tr = document.createElement('tr');
+            if (mov.es_reintegro) tr.classList.add('fila-reintegro');
+
+            tr.innerHTML = `
+                <td class="fecha-col">${formatFecha(mov.fecha)}</td>
+                <td class="comercio-col">${nombre}${cuotaInfo}</td>
+                <td><span class="categoria-tag" style="--cat-color:${colorCat}">${categoria}</span></td>
+                <td style="text-align:right;">${montoARS}</td>
+                <td style="text-align:right;">${montoUSD}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // Renderizar paginación
+    if (paginEl) {
+        paginEl.innerHTML = '';
+        if (totalPaginas > 1) {
+            renderizarPaginacion(paginEl, extractoPagina, totalPaginas);
+        }
+    }
+}
+
+function renderizarPaginacion(contenedor, paginaActual, totalPaginas) {
+    const crearBtn = (texto, pagina, esActivo = false, deshabilitado = false) => {
+        const btn = document.createElement('button');
+        btn.textContent = texto;
+        btn.className   = `pag-btn${esActivo ? ' activo' : ''}`;
+        btn.disabled    = deshabilitado;
+        if (!deshabilitado && !esActivo) {
+            btn.addEventListener('click', () => {
+                extractoPagina = pagina;
+                renderizarExtractoFiltrado();
+                // Hacer scroll suave hacia la tabla
+                document.getElementById('cuerpo-extracto')
+                    ?.closest('.bento-caja')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+        }
+        return btn;
+    };
+
+    // Botón anterior
+    contenedor.appendChild(crearBtn('←', paginaActual - 1, false, paginaActual === 1));
+
+    // Páginas (ventana de 5 páginas centrada en la actual)
+    const VENTANA = 5;
+    let inicio = Math.max(1, paginaActual - Math.floor(VENTANA / 2));
+    let fin    = Math.min(totalPaginas, inicio + VENTANA - 1);
+    if (fin - inicio + 1 < VENTANA) inicio = Math.max(1, fin - VENTANA + 1);
+
+    if (inicio > 1) {
+        contenedor.appendChild(crearBtn('1', 1));
+        if (inicio > 2) {
+            const sep = document.createElement('span');
+            sep.className   = 'pag-info';
+            sep.textContent = '…';
+            contenedor.appendChild(sep);
+        }
+    }
+
+    for (let p = inicio; p <= fin; p++) {
+        contenedor.appendChild(crearBtn(String(p), p, p === paginaActual));
+    }
+
+    if (fin < totalPaginas) {
+        if (fin < totalPaginas - 1) {
+            const sep = document.createElement('span');
+            sep.className   = 'pag-info';
+            sep.textContent = '…';
+            contenedor.appendChild(sep);
+        }
+        contenedor.appendChild(crearBtn(String(totalPaginas), totalPaginas));
+    }
+
+    // Botón siguiente
+    contenedor.appendChild(crearBtn('→', paginaActual + 1, false, paginaActual === totalPaginas));
+
+    // Info de página
+    const info = document.createElement('span');
+    info.className   = 'pag-info';
+    info.textContent = `Pág ${paginaActual}/${totalPaginas}`;
+    contenedor.appendChild(info);
+}
+
+// ----------------------------------------------------------------
+// EVENTOS DE UI
+// ----------------------------------------------------------------
+function bindEventos() {
+    // Login form
+    document.getElementById('form-login')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email  = document.getElementById('input-email').value.trim();
+        const btn    = document.getElementById('btn-login');
+        const msg    = document.getElementById('login-mensaje');
+
+        if (!email) return;
+
+        btn.disabled     = true;
+        btn.textContent  = 'Enviando...';
+        msg.textContent  = '';
+
+        try {
+            await DB.enviarMagicLink(email);
+            msg.textContent = '¡Link enviado! Revisá tu email y hacé click en el enlace.';
+            msg.className   = 'login-success';
+        } catch (err) {
+            msg.textContent = `Error: ${err.message}`;
+            msg.className   = 'login-error';
+            btn.disabled    = false;
+            btn.textContent = 'Enviar link de acceso';
+        }
+    });
+
+    // Selector de mes
+    document.getElementById('selector-mes')?.addEventListener('change', (e) => {
+        cargarMes(e.target.value);
+    });
+
+    // Botón subir archivo
+    document.getElementById('btn-subir')?.addEventListener('click', () => {
+        const mesDestino = document.getElementById('mes-destino')?.value;
+        if (!mesDestino) {
+            alert('Seleccioná el mes destino antes de subir el archivo.');
+            return;
+        }
+        document.getElementById('input-archivo').click();
+    });
+
+    // Input file
+    document.getElementById('input-archivo')?.addEventListener('change', manejarSubidaArchivo);
+
+    // Botón clasificar
+    document.getElementById('btn-clasificar')?.addEventListener('click', abrirModalClasificar);
+
+    // Botón migrar desde Sheets
+    document.getElementById('btn-migrar')?.addEventListener('click', ejecutarMigracion);
+
+    // Botón cerrar sesión
+    document.getElementById('btn-logout')?.addEventListener('click', async () => {
+        await DB.cerrarSesion();
+    });
+
+    // Extracto — búsqueda en tiempo real
+    document.getElementById('extracto-buscar')?.addEventListener('input', () => {
+        extractoPagina = 1;
+        renderizarExtractoFiltrado();
+    });
+
+    // Extracto — filtro por categoría
+    document.getElementById('extracto-filtro-cat')?.addEventListener('change', () => {
+        extractoPagina = 1;
+        renderizarExtractoFiltrado();
+    });
+}
+
+// ----------------------------------------------------------------
+// SUBIDA DE ARCHIVO
+// ----------------------------------------------------------------
+async function manejarSubidaArchivo(evento) {
+    const file = evento.target.files[0];
+    if (!file) return;
+
+    const boton = document.getElementById('btn-subir');
+    boton.textContent = 'Procesando...';
+    boton.disabled    = true;
+
+    try {
+        const movimientos = await Parser.parsearArchivo(file);
+
+        if (!movimientos.length) {
+            alert('No se encontraron movimientos válidos en el archivo.');
+            return;
+        }
+
+        const resultado = await DB.importarMovimientos(movimientos);
+
+        alert(
+            `✅ Importación completada:\n` +
+            `• ${resultado.insertados} movimientos nuevos\n` +
+            `• ${resultado.duplicados} duplicados ignorados`
+        );
+
+        // Ocultar banner de migración si era el primer import
+        document.getElementById('banner-migracion')?.style.setProperty('display', 'none');
+
+        // Refrescar dashboard
+        await arrancarDashboard();
+
+    } catch (err) {
+        console.error('Error al importar:', err);
+        alert(`Error al importar el archivo: ${err.message}`);
+    } finally {
+        boton.textContent              = 'Subir Resumen';
+        boton.disabled                 = false;
+        evento.target.value            = '';
+    }
+}
+
+// ----------------------------------------------------------------
+// MODAL DE CLASIFICACIÓN
+// ----------------------------------------------------------------
+async function abrirModalClasificar() {
+    const overlay   = document.getElementById('modal-clasificar');
+    const contenedor = document.getElementById('contenido-modal');
+    overlay.style.display = 'flex';
+
+    contenedor.innerHTML = `<p class="modal-cargando">Escaneando comercios sin clasificar...</p>`;
+
+    try {
+        const [pendientes, categorias] = await Promise.all([
+            DB.obtenerPendientes(),
+            DB.obtenerCategorias(),
+        ]);
+
+        if (!pendientes.length) {
+            contenedor.innerHTML = `
+                <p style="text-align:center; font-family:var(--font-display);
+                   font-size:1.3rem; color:var(--green); padding:32px 0;">
+                    Todo clasificado — sin pendientes.
+                </p>`;
+            return;
+        }
+
+        let opcionesCat = `<option value="">— Seleccionar —</option>`;
+        categorias.forEach(cat => {
+            opcionesCat += `<option value="${cat}">${cat}</option>`;
+        });
+
+        let html = `
+            <table class="tabla-elegante" id="tabla-pendientes">
+                <thead>
+                    <tr>
+                        <th>Nombre Original</th>
+                        <th>Nombre Limpio</th>
+                        <th>Categoría</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+        pendientes.forEach(item => {
+            html += `
+                <tr data-cruda="${item.cruda}">
+                    <td class="fecha-col" style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                        title="${item.cruda}">${item.cruda}</td>
+                    <td><input type="text" class="input-sugerencia" value="${item.limpia}"></td>
+                    <td><select class="select-categoria">${opcionesCat}</select></td>
+                </tr>`;
+        });
+
+        html += `</tbody></table>
+            <button id="btn-guardar-clasif" class="btn-accion"
+                    style="width:100%; margin-top:20px;">
+                Guardar Clasificaciones
+            </button>`;
+
+        contenedor.innerHTML = html;
+        document.getElementById('btn-guardar-clasif').addEventListener('click', guardarClasificaciones);
+
+    } catch (err) {
+        contenedor.innerHTML = `<p style="color:var(--red); text-align:center; padding:24px;">
+            Error: ${err.message}</p>`;
+    }
+}
+
+function cerrarModal() {
+    document.getElementById('modal-clasificar').style.display = 'none';
+}
+
+async function guardarClasificaciones() {
+    const filas  = document.querySelectorAll('#tabla-pendientes tbody tr');
+    const reglas = [];
+
+    filas.forEach(fila => {
+        const clave        = fila.dataset.cruda;
+        const nombreLimpio = fila.querySelector('.input-sugerencia').value.trim();
+        const categoria    = fila.querySelector('.select-categoria').value;
+        if (categoria && nombreLimpio) {
+            reglas.push({ clave, nombreLimpio, categoria });
+        }
+    });
+
+    if (!reglas.length) {
+        alert('No hay clasificaciones para guardar.');
+        return;
+    }
+
+    const boton = document.getElementById('btn-guardar-clasif');
+    boton.textContent = 'Guardando...';
+    boton.disabled    = true;
+
+    try {
+        await DB.guardarVariasClasificaciones(reglas);
+        alert(`✅ ${reglas.length} clasificaciones guardadas.`);
+        cerrarModal();
+        await cargarMes(mesActivo);
+    } catch (err) {
+        alert(`Error al guardar: ${err.message}`);
+        boton.textContent = 'Guardar Clasificaciones';
+        boton.disabled    = false;
+    }
+}
+
+// ----------------------------------------------------------------
+// MIGRACIÓN DESDE GOOGLE SHEETS
+// ----------------------------------------------------------------
+async function ejecutarMigracion() {
+    const btn         = document.getElementById('btn-migrar');
+    const msg         = document.getElementById('migracion-estado');
+    const progresoWrap = document.getElementById('migracion-progreso-wrap');
+    const barra       = document.getElementById('migracion-barra');
+
+    btn.disabled    = true;
+    btn.textContent = 'Migrando...';
+
+    // Mostrar barra de progreso
+    if (progresoWrap) progresoWrap.style.display = 'block';
+    if (barra) barra.style.width = '5%';
+
+    const actualizarProgreso = (texto) => {
+        if (msg) msg.textContent = texto;
+
+        // Parsear porcentaje del texto si viene como "Importando... 45%"
+        const match = texto.match(/(\d+)%/);
+        if (match && barra) {
+            barra.style.width = `${match[1]}%`;
+        } else if (texto.includes('Descargando') && barra) {
+            barra.style.width = '10%';
+        } else if (texto.includes('Procesando') && barra) {
+            barra.style.width = '25%';
+        } else if (texto.includes('Importando') && !match && barra) {
+            barra.style.width = '35%';
+        } else if (texto.includes('completada') && barra) {
+            barra.style.width = '100%';
+        }
+    };
+
+    try {
+        const resultado = await DB.migrarDesdeSheets(actualizarProgreso);
+
+        if (barra) barra.style.width = '100%';
+        if (msg) msg.textContent =
+            `Migración exitosa: ${resultado.insertados} movimientos importados, ` +
+            `${resultado.clasificaciones} reglas de clasificación recuperadas.`;
+
+        // Esperar un momento para mostrar el 100% antes de ocultar
+        await new Promise(r => setTimeout(r, 1200));
+
+        document.getElementById('banner-migracion').style.display = 'none';
+        await arrancarDashboard();
+
+    } catch (err) {
+        console.error('Error en migración:', err);
+        if (barra) { barra.style.width = '0%'; barra.style.background = 'var(--red)'; }
+        if (msg) msg.textContent = `Error: ${err.message}`;
+        btn.disabled    = false;
+        btn.textContent = 'Migrar desde Google Sheets';
+    }
+}
+
+// ----------------------------------------------------------------
+// UTILIDADES
+// ----------------------------------------------------------------
+function formatARS(valor, abreviado = false) {
+    if (valor === null || valor === undefined) return '—';
+    const n = parseFloat(valor);
+    if (isNaN(n)) return '—';
+    if (abreviado) {
+        if (Math.abs(n) >= 1_000_000) return `$${(n/1_000_000).toFixed(1)}M`;
+        if (Math.abs(n) >= 1_000)     return `$${(n/1_000).toFixed(0)}k`;
+        return `$${n}`;
+    }
+    return '$ ' + n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function formatearMes(periodo) {
+    const [y, m] = periodo.split('-');
+    const meses  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    return `${meses[parseInt(m, 10) - 1]} ${y}`;
+}
+
+function formatFecha(fechaISO) {
+    // '2026-03-14' → '14/03'
+    if (!fechaISO) return '';
+    const [, m, d] = fechaISO.split('-');
+    return `${d}/${m}`;
+}
+
+function obtenerColorCategoria(categoria) {
+    const cat = CATEGORIAS_DEFAULT?.find(c =>
+        c.nombre.toLowerCase() === categoria.toLowerCase()
+    );
+    return cat?.color || '#475569';
+}
+
+function mostrarSkeletons() {
+    const skel = (cls) => `<span class="skeleton ${cls}"></span>`;
+    const elTotal = document.getElementById('val-total');
+    const elUsd   = document.getElementById('val-total-usd');
+    const elMov   = document.getElementById('val-movimientos');
+    if (elTotal) elTotal.innerHTML       = skel('skeleton-kpi');
+    if (elUsd)   elUsd.innerHTML         = skel('skeleton-sub');
+    if (elMov)   elMov.innerHTML         = skel('skeleton-sub');
+}
+
+function ocultarSkeletons() {
+    document.getElementById('val-total').textContent       = '—';
+    document.getElementById('val-total-usd').textContent   = '';
+    document.getElementById('val-movimientos').textContent = 'Sin datos aún';
+}
+
+function mostrarError(msg) {
+    console.error(msg);
+    document.getElementById('val-total').textContent = 'Error';
+}

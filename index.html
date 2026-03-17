@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#080c12">
+  <title>Finanzas — Observatorio Personal</title>
+
+  <!-- Favicon SVG inline -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23080c12'/%3E%3Cpolygon points='16,4 28,10 28,22 16,28 4,22 4,10' fill='none' stroke='%23c9a96e' stroke-width='1.5' opacity='0.9'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%23c9a96e' opacity='0.95'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%234fc3c3' stroke-width='0.8' opacity='0.5'/%3E%3C/svg%3E">
+  <!-- Fallback favicon para navegadores que no soporten SVG -->
+  <link rel="alternate icon" href="data:image/png;base64,iVBORw0KGgo=">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Chart.js + datalabels -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+
+  <!-- xlsx.js para parsear archivos del banco -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Estilos -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <script>
+    document.documentElement.style.setProperty('background-color', '#080c12', 'important');
+    document.body.style.setProperty('background-color', '#080c12', 'important');
+  </script>
+
+  <div class="fondo-luces" aria-hidden="true"></div>
+
+  <!-- ============================================================
+       PANTALLA DE LOGIN
+  ============================================================ -->
+  <div id="pantalla-login" class="login-overlay">
+    <div class="login-caja">
+
+      <div class="login-logo" aria-hidden="true">◈</div>
+      <h1 class="login-titulo">Finanzas</h1>
+      <p class="login-subtitulo">Observatorio Personal</p>
+
+      <form id="form-login" class="login-form" novalidate>
+        <label class="login-label" for="input-email">Email de acceso</label>
+        <input
+          type="email"
+          id="input-email"
+          class="login-input"
+          placeholder="tu@email.com"
+          autocomplete="email"
+          required
+        >
+        <button type="submit" id="btn-login" class="btn-accion btn-login-submit">
+          Enviar link de acceso
+        </button>
+      </form>
+
+      <p id="login-mensaje" class="login-mensaje"></p>
+
+      <p class="login-nota">
+        Recibirás un link en tu email. Un click y entrás, sin contraseña.
+      </p>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       PANTALLA PRINCIPAL (APP)
+  ============================================================ -->
+  <div id="pantalla-app" style="display:none;">
+
+    <div class="app-container">
+
+      <!-- ----------------------------------------------------------
+           CABECERA
+      ---------------------------------------------------------- -->
+      <header class="cabecera">
+        <div class="cabecera-top">
+          <div>
+            <p class="cabecera-subtitulo">Observatorio Financiero Personal</p>
+            <h1>Dashboard de Finanzas</h1>
+          </div>
+          <button id="btn-logout" class="btn-logout" title="Cerrar sesión">
+            Salir
+          </button>
+        </div>
+
+        <div class="controles-header">
+          <select id="selector-mes" title="Seleccionar mes">
+            <option value="">Cargando meses...</option>
+          </select>
+
+          <input type="month" id="mes-destino" title="Mes destino del archivo">
+          <input type="file" id="input-archivo" accept=".xls,.xlsx,.csv" style="display:none;">
+
+          <button id="btn-subir" class="btn-accion">Subir Resumen</button>
+          <button id="btn-clasificar" class="btn-accion btn-secundario">Clasificar</button>
+        </div>
+      </header>
+
+      <!-- ----------------------------------------------------------
+           BANNER DE MIGRACIÓN (solo si no hay datos)
+      ---------------------------------------------------------- -->
+      <div id="banner-migracion" class="banner-migracion" style="display:none;">
+        <div class="banner-icono" aria-hidden="true">◈</div>
+        <div class="banner-texto">
+          <strong>Primera vez aquí</strong>
+          <span>Importá tu historial desde Google Sheets en un click — sin perder nada.</span>
+          <span id="migracion-estado" class="migracion-estado"></span>
+          <div id="migracion-progreso-wrap" class="migracion-progreso-wrap" style="display:none;">
+            <div class="migracion-barra-fondo">
+              <div id="migracion-barra" class="migracion-barra" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <button id="btn-migrar" class="btn-accion">
+          Migrar desde Google Sheets
+        </button>
+      </div>
+
+      <!-- ----------------------------------------------------------
+           TARJETA KPI (una sola: Total del Mes)
+      ---------------------------------------------------------- -->
+      <div class="contenedor-kpi">
+
+        <div class="tarjeta kpi-total">
+          <div class="titulo-kpi">Total del Mes</div>
+          <div class="valor-kpi" id="val-total">
+            <span class="skeleton skeleton-kpi"></span>
+          </div>
+          <div class="kpi-usd" id="val-total-usd"></div>
+          <div class="kpi-meta" id="val-movimientos"></div>
+          <span class="tarjeta-icon" aria-hidden="true">◉</span>
+        </div>
+
+      </div>
+
+      <!-- ----------------------------------------------------------
+           BENTO GRID
+      ---------------------------------------------------------- -->
+      <div class="bento-grid">
+
+        <!-- Evolución histórica -->
+        <div class="bento-caja area-evo">
+          <div class="bento-titulo">Evolución Histórica</div>
+          <div class="chart-container">
+            <canvas id="grafico-evolucion"></canvas>
+          </div>
+        </div>
+
+        <!-- Distribución por categoría -->
+        <div class="bento-caja area-torta">
+          <div class="bento-titulo">Distribución</div>
+          <div class="chart-container">
+            <canvas id="grafico-torta"></canvas>
+          </div>
+        </div>
+
+        <!-- Top 10 comercios -->
+        <div class="bento-caja area-top">
+          <div class="bento-titulo">Top 10 Comercios</div>
+          <div class="chart-container">
+            <canvas id="grafico-top"></canvas>
+          </div>
+        </div>
+
+        <!-- Cuotas pendientes -->
+        <div class="bento-caja area-cuotas">
+          <div class="bento-titulo">Cuotas Pendientes</div>
+          <div class="tabla-wrapper">
+            <table class="tabla-elegante">
+              <thead>
+                <tr>
+                  <th>Comercio</th>
+                  <th style="text-align:center;">Cuota</th>
+                  <th style="text-align:right;">Monto</th>
+                </tr>
+              </thead>
+              <tbody id="cuerpo-cuotas"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Extracto del mes -->
+        <div class="bento-caja area-extracto">
+          <div class="extracto-header">
+            <div class="bento-titulo">Extracto del Mes</div>
+            <div class="extracto-controles">
+              <input
+                type="search"
+                id="extracto-buscar"
+                class="extracto-input-buscar"
+                placeholder="Buscar comercio..."
+                autocomplete="off"
+              >
+              <select id="extracto-filtro-cat" class="extracto-select-cat">
+                <option value="">Todas las categorías</option>
+              </select>
+              <span id="extracto-contador" class="extracto-contador"></span>
+            </div>
+          </div>
+          <div class="tabla-wrapper">
+            <table class="tabla-elegante">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Comercio</th>
+                  <th>Categoría</th>
+                  <th style="text-align:right;">Monto ARS</th>
+                  <th style="text-align:right;">Monto USD</th>
+                </tr>
+              </thead>
+              <tbody id="cuerpo-extracto"></tbody>
+            </table>
+          </div>
+          <div id="extracto-paginacion" class="extracto-paginacion"></div>
+        </div>
+
+      </div><!-- /.bento-grid -->
+
+      <!-- ----------------------------------------------------------
+           FOOTER
+      ---------------------------------------------------------- -->
+      <footer class="footer-app">
+        <p>Desarrollado por <span>Edward Morales Ravelo</span> &nbsp;·&nbsp; 2026</p>
+      </footer>
+
+    </div><!-- /.app-container -->
+
+  </div><!-- /#pantalla-app -->
+
+  <!-- ============================================================
+       MODAL: CLASIFICAR COMERCIOS
+  ============================================================ -->
+  <div class="modal-overlay" id="modal-clasificar"
+       role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+    <div class="modal-caja">
+      <div class="modal-header">
+        <h2 id="modal-titulo">Clasificar Comercios</h2>
+        <button class="modal-close" onclick="cerrarModal()" aria-label="Cerrar">✕</button>
+      </div>
+      <div id="contenido-modal">
+        <p class="modal-cargando">Cargando...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts (orden importa) -->
+  <script src="config.js"></script>
+  <script src="parser.js"></script>
+  <script src="db.js"></script>
+  <script src="app.js"></script>
+
+</body>
+</html>

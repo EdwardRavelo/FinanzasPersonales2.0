@@ -1,0 +1,14 @@
+# Configuración con keys de Supabase — NO subir a GitHub
+# (se genera automáticamente en build via build.js)
+config.js
+
+# Vercel
+.vercel/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
