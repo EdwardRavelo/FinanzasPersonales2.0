@@ -18,7 +18,7 @@ if (!url || !anon) {
 }
 
 const sheetUrl = sheet ||
-    'https://docs.google.com/spreadsheets/d/1Yf7QI7sZ40F9YspJZoc4YTPyqXP9Q_gIsaBb0ppxwcw/export?format=csv&gid=1001084780';
+    'https://docs.google.com/spreadsheets/d/e/2PACX-1vTDKgLx_q4QJ_S3qZroQW29E1ORuuRRZaSyvaWm40gKoOmJNSfdXbeGYsj-1B8Z1SC8lvJON-AR6KCG/pub?output=csv';
 
 const contenido = `// ================================================================
 // CONFIG.JS — Generado automáticamente por build.js

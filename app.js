@@ -86,15 +86,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         mostrarApp();
         await arrancarDashboard();
     } else {
-        // Solo mostrar login si no hay sesión NI token en URL
-        // (el token en URL lo maneja onAuthStateChange arriba)
-        if (!window.location.hash.includes('access_token')) {
+        // Detectar magic link en URL: implicit flow (#access_token=) o PKCE (?code=)
+        const hayTokenEnUrl = window.location.hash.includes('access_token')
+                           || window.location.search.includes('code=');
+
+        if (!hayTokenEnUrl) {
             mostrarLogin();
-        }
-        // Si hay token en URL, mostrar pantalla de carga mientras procesa
-        else {
+        } else {
+            // Ocultar todo mientras Supabase procesa el codigo/token
             document.getElementById('pantalla-login').style.display = 'none';
             document.getElementById('pantalla-app').style.display   = 'none';
+
+            // Fallback: si en 10s no llega el evento de auth, mostrar login
+            // (evita pantalla negra permanente si el token vencio o fallo)
+            setTimeout(() => {
+                if (!sessionUsuario) mostrarLogin();
+            }, 10000);
         }
     }
 });

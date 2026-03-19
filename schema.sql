@@ -33,8 +33,8 @@ CREATE TABLE IF NOT EXISTS movimientos (
     archivo_origen  TEXT,                    -- nombre del .xlsx importado
     created_at      TIMESTAMPTZ DEFAULT NOW(),
 
-    -- Evitar duplicados al reimportar el mismo archivo
-    UNIQUE (user_id, fecha, comercio_crudo, monto_ars, monto_usd)
+    -- Sin UNIQUE constraint aquí: se usa un índice con COALESCE (ver al final del archivo)
+    -- para manejar correctamente los NULL de monto_usd y cuota_actual
 );
 
 -- ----------------------------------------------------------------
@@ -136,6 +136,29 @@ CREATE POLICY "categorias: usuario solo actualiza las suyas"
 CREATE POLICY "categorias: usuario solo borra las suyas"
     ON categorias FOR DELETE
     USING (auth.uid() = user_id);
+
+-- ----------------------------------------------------------------
+-- ÍNDICE ÚNICO: reemplaza el UNIQUE constraint original
+-- Usa COALESCE para manejar NULLs (en PostgreSQL NULL != NULL dentro
+-- de un constraint, lo que permite duplicados con monto_usd=NULL).
+-- Incluye mes_periodo (mes de facturación) y cuota_actual para
+-- distinguir correctamente las cuotas de distintos meses.
+-- ----------------------------------------------------------------
+
+-- Ejecutar en instancias existentes (migration):
+--   ALTER TABLE movimientos DROP CONSTRAINT IF EXISTS movimientos_user_id_fecha_comercio_crudo_monto_ars_monto_usd_key;
+--   DROP INDEX IF EXISTS movimientos_unique_idx;
+
+CREATE UNIQUE INDEX IF NOT EXISTS movimientos_unique_idx
+    ON movimientos (
+        user_id,
+        mes_periodo,
+        fecha,
+        comercio_crudo,
+        COALESCE(monto_ars::text, ''),
+        COALESCE(monto_usd::text, ''),
+        COALESCE(cuota_actual, 0)
+    );
 
 -- ----------------------------------------------------------------
 -- DATOS INICIALES: categorias por defecto

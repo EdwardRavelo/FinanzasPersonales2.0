@@ -15,10 +15,13 @@ const DB = (() => {
             auth: {
                 // Persiste la sesion en localStorage entre recargas
                 persistSession:    true,
-                // Detecta automaticamente el token del magic link en la URL (#access_token=...)
+                // Detecta automaticamente el token del magic link en la URL
                 detectSessionInUrl: true,
                 // Refresca el token automaticamente antes de que expire
                 autoRefreshToken:  true,
+                // PKCE es inmune a scanners de email que consumen el token
+                // antes de que el usuario abra el link (problema comun en movil)
+                flowType:          'pkce',
             }
         });
     }
@@ -33,7 +36,8 @@ const DB = (() => {
         const { error } = await supabase.auth.signInWithOtp({
             email,
             options: {
-                emailRedirectTo: window.location.href,
+                // Usar origin (sin path/hash) para evitar loops de redireccion
+                emailRedirectTo: window.location.origin,
             },
         });
         if (error) throw error;
@@ -241,7 +245,8 @@ const DB = (() => {
 
     // ----------------------------------------------------------------
     // IMPORTAR MOVIMIENTOS (desde .xlsx parseado)
-    // Usa upsert para ignorar duplicados (por UNIQUE constraint)
+    // Deduplicación en memoria contra el mes ya cargado, para evitar
+    // que el constraint NULL!=NULL de PostgreSQL deje pasar duplicados ARS.
     // ----------------------------------------------------------------
     async function importarMovimientos(movimientos) {
         if (!movimientos.length) return { insertados: 0, duplicados: 0 };
@@ -259,20 +264,45 @@ const DB = (() => {
             };
         });
 
-        // Supabase upsert: en conflicto con UNIQUE → ignorar (no actualizar)
+        // Cargar filas ya existentes del mismo mes para deduplicar en memoria.
+        // Clave: fecha|comercio_crudo|monto_ars|monto_usd|cuota_actual
+        const mesPeriodo = movConClasif[0]?.mes_periodo;
+        let nuevos = movConClasif;
+
+        if (mesPeriodo) {
+            const { data: existentes, error: errEx } = await supabase
+                .from('movimientos')
+                .select('fecha, comercio_crudo, monto_ars, monto_usd, cuota_actual')
+                .eq('user_id', userId)
+                .eq('mes_periodo', mesPeriodo);
+
+            if (errEx) throw errEx;
+
+            // Normalizar montos a string con precisión fija para comparar correctamente
+            // entre valores del parser (number: 5000) y del DB (string: "5000.00")
+            const clave = (r) => {
+                const ars = r.monto_ars != null ? parseFloat(r.monto_ars).toFixed(2) : '';
+                const usd = r.monto_usd != null ? parseFloat(r.monto_usd).toFixed(4) : '';
+                return `${r.fecha}|${r.comercio_crudo}|${ars}|${usd}|${r.cuota_actual ?? ''}`;
+            };
+
+            const setExistentes = new Set((existentes || []).map(clave));
+            nuevos = movConClasif.filter(m => !setExistentes.has(clave(m)));
+        }
+
+        const duplicados = movimientos.length - nuevos.length;
+        if (!nuevos.length) return { insertados: 0, duplicados };
+
         const { data, error } = await supabase
             .from('movimientos')
-            .upsert(movConClasif, {
-                onConflict:      'user_id,fecha,comercio_crudo,monto_ars,monto_usd',
-                ignoreDuplicates: true,
-            })
+            .insert(nuevos)
             .select('id');
 
         if (error) throw error;
 
         return {
-            insertados:  data?.length ?? 0,
-            duplicados:  movimientos.length - (data?.length ?? 0),
+            insertados: data?.length ?? 0,
+            duplicados: duplicados + (nuevos.length - (data?.length ?? 0)),
         };
     }
 
@@ -387,6 +417,8 @@ const DB = (() => {
         onProgreso?.(`Importando movimientos (puede tomar unos segundos)...`);
 
         // 4. Insertar movimientos en lotes de 500
+        // Sin onConflict para que el índice de expresión (COALESCE) actúe;
+        // ignoreDuplicates: true genera ON CONFLICT DO NOTHING sobre todos los índices únicos.
         const LOTE = 500;
         let insertados = 0;
 
@@ -398,10 +430,7 @@ const DB = (() => {
 
             const { data, error } = await supabase
                 .from('movimientos')
-                .upsert(lote, {
-                    onConflict:       'user_id,fecha,comercio_crudo,monto_ars,monto_usd',
-                    ignoreDuplicates: true,
-                })
+                .upsert(lote, { ignoreDuplicates: true })
                 .select('id');
 
             if (error) throw error;

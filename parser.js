@@ -127,6 +127,24 @@ const Parser = (() => {
     }
 
     // ----------------------------------------------------------------
+    // Sobreescribir mes_periodo de todas las filas con el mes de liquidación
+    // = el mes que aparece con mayor frecuencia entre las fechas parseadas.
+    // Esto asegura que las cuotas (cuya fecha es la de compra original, no
+    // la del resumen) queden asignadas al mes correcto de facturación.
+    // ----------------------------------------------------------------
+    function normalizarMesPeriodo(filas) {
+        if (!filas.length) return;
+        const conteo = {};
+        filas.forEach(m => {
+            if (m.mes_periodo) conteo[m.mes_periodo] = (conteo[m.mes_periodo] || 0) + 1;
+        });
+        const mesLiquidacion = Object.entries(conteo).sort((a, b) => b[1] - a[1])[0]?.[0];
+        if (mesLiquidacion) {
+            filas.forEach(m => { m.mes_periodo = mesLiquidacion; });
+        }
+    }
+
+    // ----------------------------------------------------------------
     // FORMATO NUEVO (xlsx actual del banco)
     // Hoja: "movements"
     // Columnas: [Fecha y hora, Movimientos, Cuota, Monto]
@@ -170,6 +188,11 @@ const Parser = (() => {
                 archivo_origen: nombreArchivo,
             });
         }
+
+        // Todas las filas del resumen pertenecen al mes de liquidación,
+        // no al mes de la compra original. Esto evita que las cuotas
+        // aparezcan en meses viejos en lugar del mes del resumen actual.
+        normalizarMesPeriodo(resultados);
 
         return resultados;
     }
@@ -236,6 +259,9 @@ const Parser = (() => {
                 archivo_origen: nombreArchivo,
             });
         }
+
+        // Mismo criterio: todas las filas al mes de liquidación.
+        normalizarMesPeriodo(resultados);
 
         return resultados;
     }
