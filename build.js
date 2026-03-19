@@ -18,7 +18,7 @@ if (!url || !anon) {
 }
 
 const sheetUrl = sheet ||
-    'https://docs.google.com/spreadsheets/d/e/2PACX-1vTDKgLx_q4QJ_S3qZroQW29E1ORuuRRZaSyvaWm40gKoOmJNSfdXbeGYsj-1B8Z1SC8lvJON-AR6KCG/pub?output=csv';
+    'https://docs.google.com/spreadsheets/d/e/2PACX-1vTDKgLx_q4QJ_S3qZroQW29E1ORuuRRZaSyvaWm40gKoOmJNSfdXbeGYsj-1B8Z1SC8lvJON-AR6KCG/pub?gid=1001084780&single=true&output=csv';
 
 const contenido = `// ================================================================
 // CONFIG.JS — Generado automáticamente por build.js
