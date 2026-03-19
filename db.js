@@ -32,6 +32,14 @@ const DB = (() => {
     // ----------------------------------------------------------------
     // AUTH — Magic Link
     // ----------------------------------------------------------------
+    async function loginConGoogle() {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: window.location.origin },
+        });
+        if (error) throw error;
+    }
+
     async function enviarMagicLink(email) {
         const { error } = await supabase.auth.signInWithOtp({
             email,
@@ -507,6 +515,7 @@ const DB = (() => {
         setUserId,
         getClient,
         // Auth
+        loginConGoogle,
         enviarMagicLink,
         obtenerSesion,
         escucharCambiosAuth,

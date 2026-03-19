@@ -803,13 +803,54 @@ select option { background-color: var(--bg-surface); }
   box-shadow: 0 0 0 3px var(--gold-dim);
 }
 
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 16px;
+  background: #fff;
+  color: #1f1f1f;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.btn-google:hover  { background: #f1f3f4; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+.btn-google:active { background: #e8eaed; }
+
+.login-separador {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.login-separador::before,
+.login-separador::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,0.08);
+}
+
 .btn-login-submit {
   width: 100%;
   padding: 14px;
   font-size: 13px;
   letter-spacing: 0.12em;
   margin-top: 4px;
+  background: transparent;
+  border: 1px solid rgba(201,169,110,0.3);
+  color: var(--gold);
 }
+.btn-login-submit:hover { background: var(--gold-dim); }
 
 .login-mensaje {
   font-family: var(--font-mono);
