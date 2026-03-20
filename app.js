@@ -700,11 +700,6 @@ function bindEventos() {
 
     // Botón subir archivo
     document.getElementById('btn-subir')?.addEventListener('click', () => {
-        const mesDestino = document.getElementById('mes-destino')?.value;
-        if (!mesDestino) {
-            alert('Seleccioná el mes destino antes de subir el archivo.');
-            return;
-        }
         document.getElementById('input-archivo').click();
     });
 

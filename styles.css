@@ -669,6 +669,8 @@ select option { background-color: var(--bg-surface); }
 /* ----------------------------------------------------------------
    RESPONSIVE
    ---------------------------------------------------------------- */
+
+/* Tablet */
 @media (max-width: 900px) {
   .bento-grid { grid-template-columns: repeat(2, 1fr); }
   .area-evo      { grid-column: span 2; }
@@ -678,22 +680,118 @@ select option { background-color: var(--bg-surface); }
   .area-extracto { grid-column: span 2; }
 }
 
+/* Mobile */
 @media (max-width: 640px) {
-  .app-container { padding: 16px 14px; }
-  .controles-header { flex-direction: column; width: 100%; gap: 8px; }
-  .controles-header select,
-  .controles-header input[type="month"],
-  .controles-header button { width: 100%; }
+  .app-container {
+    padding: 16px 14px;
+  }
 
-  .bento-grid { grid-template-columns: 1fr; }
+  /* Cabecera */
+  .cabecera { margin-bottom: 28px; }
+
+  .cabecera-top {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cabecera-top h1 { font-size: 1.5rem; }
+  .cabecera-subtitulo { margin-bottom: 16px; font-size: 10px; }
+
+  /* Controles: selector full-width, botones en fila */
+  .controles-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  #selector-mes { grid-column: span 2; }
+
+  /* Touch targets */
+  .btn-accion,
+  .btn-logout,
+  select,
+  input[type="month"] {
+    min-height: 44px;
+  }
+
+  /* Bento grid */
+  .bento-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
   .area-evo,
   .area-torta,
   .area-top,
   .area-cuotas,
   .area-extracto { grid-column: span 1; }
 
-  .chart-container { min-height: 240px; }
-  .modal-caja { padding: 20px; }
+  .bento-caja { padding: 18px 16px; }
+
+  .chart-container { min-height: 220px; }
+
+  /* KPI */
+  .contenedor-kpi { width: 100%; }
+  .tarjeta { min-width: unset; padding: 22px 20px; }
+  .valor-kpi { font-size: clamp(28px, 8vw, 38px); }
+
+  /* Extracto — controles apilados */
+  .extracto-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .extracto-controles {
+    width: 100%;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .extracto-input-buscar  { width: 100%; }
+  .extracto-select-cat    { width: 100%; max-width: unset; }
+
+  /* Modal como bottom sheet */
+  .modal-overlay { align-items: flex-end; }
+  .modal-caja {
+    width: 100%;
+    max-width: 100%;
+    max-height: 88vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding: 24px 18px 32px;
+  }
+
+  /* Banner */
+  .banner-migracion {
+    flex-direction: column;
+    text-align: center;
+    gap: 14px;
+    padding: 18px;
+  }
+
+  /* Input clasificar en modal */
+  .input-sugerencia,
+  .select-categoria { font-size: 16px; } /* evita zoom en iOS */
+}
+
+/* Teléfonos pequeños */
+@media (max-width: 480px) {
+  /* Extracto: mostrar solo Comercio y Monto ARS */
+  .area-extracto .tabla-elegante th:nth-child(1),
+  .area-extracto .tabla-elegante td:nth-child(1),
+  .area-extracto .tabla-elegante th:nth-child(3),
+  .area-extracto .tabla-elegante td:nth-child(3),
+  .area-extracto .tabla-elegante th:nth-child(5),
+  .area-extracto .tabla-elegante td:nth-child(5) {
+    display: none;
+  }
+
+  /* Comercio con más espacio al eliminar otras columnas */
+  .area-extracto .tabla-elegante td:nth-child(2) {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 /* ================================================================
@@ -814,7 +912,7 @@ select option { background-color: var(--bg-surface); }
   color: #1f1f1f;
   border: none;
   border-radius: 8px;
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -977,11 +1075,7 @@ select option { background-color: var(--bg-surface); }
   box-shadow: 0 0 8px rgba(79,195,195,0.4);
 }
 
-@media (max-width: 640px) {
-  .banner-migracion { flex-direction: column; text-align: center; }
-  .cabecera-top { flex-direction: column; gap: 12px; }
-  .btn-logout { align-self: flex-end; }
-}
+/* (reglas mobile del banner y cabecera consolidadas en el bloque @media 640px de arriba) */
 
 /* ================================================================
    KPI — versión simplificada (solo Total del Mes)
