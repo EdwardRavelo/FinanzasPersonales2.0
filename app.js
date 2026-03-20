@@ -758,8 +758,8 @@ async function manejarSubidaArchivo(evento) {
 
         alert(
             `✅ Importación completada:\n` +
-            `• ${resultado.insertados} movimientos nuevos\n` +
-            `• ${resultado.duplicados} duplicados ignorados`
+            `• ${resultado.insertados} movimientos importados\n` +
+            `• El mes fue reemplazado con los datos del archivo`
         );
 
         // Ocultar banner de migración si era el primer import

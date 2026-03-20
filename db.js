@@ -253,8 +253,10 @@ const DB = (() => {
 
     // ----------------------------------------------------------------
     // IMPORTAR MOVIMIENTOS (desde .xlsx parseado)
-    // Deduplicación en memoria contra el mes ya cargado, para evitar
-    // que el constraint NULL!=NULL de PostgreSQL deje pasar duplicados ARS.
+    // El XLSX es la fuente de verdad para el mes: reemplaza todas las
+    // filas existentes de ese mes_periodo. Esto evita el problema de
+    // montos redondeados en Sheets vs exactos en XLSX que burla el dedup.
+    // Los meses históricos (no incluidos en el archivo) no se tocan.
     // ----------------------------------------------------------------
     async function importarMovimientos(movimientos) {
         if (!movimientos.length) return { insertados: 0, duplicados: 0 };
@@ -272,45 +274,29 @@ const DB = (() => {
             };
         });
 
-        // Cargar filas ya existentes del mismo mes para deduplicar en memoria.
-        // Clave: fecha|comercio_crudo|monto_ars|monto_usd|cuota_actual
         const mesPeriodo = movConClasif[0]?.mes_periodo;
-        let nuevos = movConClasif;
+        if (!mesPeriodo) return { insertados: 0, duplicados: 0 };
 
-        if (mesPeriodo) {
-            const { data: existentes, error: errEx } = await supabase
-                .from('movimientos')
-                .select('fecha, comercio_crudo, monto_ars, monto_usd, cuota_actual')
-                .eq('user_id', userId)
-                .eq('mes_periodo', mesPeriodo);
+        // Borrar todas las filas existentes del mes para reemplazar con el XLSX
+        const { error: errDel } = await supabase
+            .from('movimientos')
+            .delete()
+            .eq('user_id', userId)
+            .eq('mes_periodo', mesPeriodo);
 
-            if (errEx) throw errEx;
+        if (errDel) throw errDel;
 
-            // Normalizar montos a string con precisión fija para comparar correctamente
-            // entre valores del parser (number: 5000) y del DB (string: "5000.00")
-            const clave = (r) => {
-                const ars = r.monto_ars != null ? parseFloat(r.monto_ars).toFixed(2) : '';
-                const usd = r.monto_usd != null ? parseFloat(r.monto_usd).toFixed(4) : '';
-                return `${r.fecha}|${r.comercio_crudo}|${ars}|${usd}|${r.cuota_actual ?? ''}`;
-            };
-
-            const setExistentes = new Set((existentes || []).map(clave));
-            nuevos = movConClasif.filter(m => !setExistentes.has(clave(m)));
-        }
-
-        const duplicados = movimientos.length - nuevos.length;
-        if (!nuevos.length) return { insertados: 0, duplicados };
-
+        // Insertar los movimientos del XLSX
         const { data, error } = await supabase
             .from('movimientos')
-            .insert(nuevos)
+            .insert(movConClasif)
             .select('id');
 
         if (error) throw error;
 
         return {
             insertados: data?.length ?? 0,
-            duplicados: duplicados + (nuevos.length - (data?.length ?? 0)),
+            duplicados: 0,
         };
     }
 
