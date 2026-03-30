@@ -17,6 +17,10 @@ let extractoTodos    = [];   // todos los movimientos del mes sin filtrar
 let extractoPagina   = 1;
 const EXTRACTO_POR_PAGINA = 30;
 
+// Estado de importación pendiente de confirmación
+let movimientosPendientes = null;
+let mesesConDataActual    = [];
+
 // ----------------------------------------------------------------
 // PALETA Y CONFIG GLOBAL DE CHART.JS
 // ----------------------------------------------------------------
@@ -731,11 +735,13 @@ function bindEventos() {
 }
 
 // ----------------------------------------------------------------
-// SUBIDA DE ARCHIVO
+// SUBIDA DE ARCHIVO — paso 1: parsear y mostrar confirmación
 // ----------------------------------------------------------------
 async function manejarSubidaArchivo(evento) {
     const file = evento.target.files[0];
     if (!file) return;
+
+    evento.target.value = ''; // reset para permitir reseleccionar el mismo archivo
 
     const boton = document.getElementById('btn-subir');
     boton.textContent = 'Procesando...';
@@ -746,31 +752,103 @@ async function manejarSubidaArchivo(evento) {
 
         if (!movimientos.length) {
             alert('No se encontraron movimientos válidos en el archivo.');
+            boton.textContent = 'Subir Resumen';
+            boton.disabled    = false;
             return;
         }
 
-        const resultado = await DB.importarMovimientos(movimientos);
+        movimientosPendientes = movimientos;
+        mesesConDataActual    = await DB.obtenerMeses();
+        mostrarConfirmacionImport(movimientos[0].mes_periodo);
+        // El botón queda deshabilitado hasta que se confirme o cancele
 
-        alert(
-            `✅ Importación completada:\n` +
-            `• ${resultado.insertados} movimientos importados\n` +
-            `• El mes fue reemplazado con los datos del archivo`
-        );
+    } catch (err) {
+        console.error('Error al leer el archivo:', err);
+        alert(`Error al leer el archivo: ${err.message}`);
+        boton.textContent = 'Subir Resumen';
+        boton.disabled    = false;
+    }
+}
 
-        // Ocultar banner de migración si era el primer import
+// ----------------------------------------------------------------
+// SUBIDA DE ARCHIVO — paso 2: modal de confirmación
+// ----------------------------------------------------------------
+function mostrarConfirmacionImport(mesDetectado) {
+    const select     = document.getElementById('import-select-mes');
+    const cantidad   = document.getElementById('import-cantidad');
+
+    // Generar opciones: 6 meses atrás hasta 2 meses adelante
+    select.innerHTML = '';
+    const hoy = new Date();
+    for (let i = -6; i <= 2; i++) {
+        const d   = new Date(hoy.getFullYear(), hoy.getMonth() + i, 1);
+        const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const opt = document.createElement('option');
+        opt.value       = val;
+        opt.textContent = formatearMes(val);
+        if (val === mesDetectado) opt.selected = true;
+        select.appendChild(opt);
+    }
+    // Si el mes detectado está fuera del rango generado, agregarlo
+    if (!Array.from(select.options).some(o => o.value === mesDetectado)) {
+        const opt = document.createElement('option');
+        opt.value       = mesDetectado;
+        opt.textContent = formatearMes(mesDetectado);
+        opt.selected    = true;
+        select.insertBefore(opt, select.firstChild);
+    }
+
+    cantidad.textContent = movimientosPendientes.length;
+
+    actualizarAdvertenciaImport();
+    select.onchange = actualizarAdvertenciaImport;
+
+    document.getElementById('modal-confirmar-import').style.display = 'flex';
+}
+
+function actualizarAdvertenciaImport() {
+    const mesSel     = document.getElementById('import-select-mes').value;
+    const adv        = document.getElementById('import-advertencia');
+    if (mesesConDataActual.includes(mesSel)) {
+        adv.querySelector('.import-adv-mes').textContent = formatearMes(mesSel);
+        adv.style.display = 'flex';
+    } else {
+        adv.style.display = 'none';
+    }
+}
+
+async function confirmarImportacion() {
+    const mesSeleccionado = document.getElementById('import-select-mes').value;
+    const btnConfirmar    = document.getElementById('btn-confirmar-import');
+
+    btnConfirmar.disabled     = true;
+    btnConfirmar.textContent  = 'Importando...';
+
+    try {
+        movimientosPendientes.forEach(m => { m.mes_periodo = mesSeleccionado; });
+
+        const resultado = await DB.importarMovimientos(movimientosPendientes);
+
+        cancelarImportacion();
+
         document.getElementById('banner-migracion')?.style.setProperty('display', 'none');
-
-        // Refrescar dashboard
         await arrancarDashboard();
 
     } catch (err) {
         console.error('Error al importar:', err);
         alert(`Error al importar el archivo: ${err.message}`);
-    } finally {
-        boton.textContent              = 'Subir Resumen';
-        boton.disabled                 = false;
-        evento.target.value            = '';
+        btnConfirmar.disabled    = false;
+        btnConfirmar.textContent = 'Importar';
     }
+}
+
+function cancelarImportacion() {
+    movimientosPendientes = null;
+    mesesConDataActual    = [];
+    document.getElementById('modal-confirmar-import').style.display = 'none';
+    const boton = document.getElementById('btn-subir');
+    boton.textContent = 'Subir Resumen';
+    boton.disabled    = false;
 }
 
 // ----------------------------------------------------------------

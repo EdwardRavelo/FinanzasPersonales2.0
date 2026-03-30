@@ -258,6 +258,38 @@
     </div>
   </div>
 
+  <!-- ============================================================
+       MODAL: CONFIRMAR IMPORTACIÓN
+  ============================================================ -->
+  <div class="modal-overlay" id="modal-confirmar-import"
+       role="dialog" aria-modal="true" aria-labelledby="import-titulo" style="display:none;">
+    <div class="modal-caja modal-caja-import">
+      <div class="modal-header">
+        <h2 id="import-titulo">Confirmar importación</h2>
+        <button class="modal-close" onclick="cancelarImportacion()" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="import-confirm-body">
+        <p class="import-info">
+          Se encontraron <strong id="import-cantidad">—</strong> movimientos.
+          Seleccioná el mes al que pertenece este resumen:
+        </p>
+        <select id="import-select-mes" class="import-mes-select"></select>
+        <div id="import-advertencia" class="import-advertencia" style="display:none;">
+          <span>⚠️</span>
+          <span><strong class="import-adv-mes"></strong> ya tiene datos — serán reemplazados por este archivo.</span>
+        </div>
+        <div class="import-acciones">
+          <button id="btn-confirmar-import" class="btn-accion" onclick="confirmarImportacion()">
+            Importar
+          </button>
+          <button class="btn-accion btn-secundario" onclick="cancelarImportacion()">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Scripts (orden importa) -->
   <script src="config.js"></script>
   <script src="parser.js"></script>
