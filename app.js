@@ -68,6 +68,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     //   - Se restaura la sesión desde localStorage
     //   - Se cierra la sesión
     DB.escucharCambiosAuth(async (session) => {
+        const eraSesionActiva = !!sessionUsuario;
         sessionUsuario = session;
         if (session) {
             DB.setUserId(session.user.id);
@@ -76,7 +77,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 history.replaceState(null, '', window.location.pathname);
             }
             mostrarApp();
-            await arrancarDashboard();
+            // Solo arrancar si es un login nuevo; los refrescos de token
+            // (al volver a la pestaña) no deben resetear el mes activo.
+            if (!eraSesionActiva) {
+                await arrancarDashboard();
+            }
         } else {
             mostrarLogin();
         }
@@ -159,7 +164,9 @@ async function arrancarDashboard() {
             selector.appendChild(opt);
         });
 
-        mesActivo = meses[0]; // El más reciente
+        // Preservar el mes que el usuario tenía seleccionado si sigue disponible;
+        // si no, ir al más reciente.
+        mesActivo = (mesActivo && meses.includes(mesActivo)) ? mesActivo : meses[0];
         selector.value = mesActivo;
 
         await cargarMes(mesActivo);
