@@ -6,7 +6,7 @@
 const Parser = (() => {
 
     // ----------------------------------------------------------------
-    // CARGOS BANCARIOS a filtrar (se importan como "Cargos Bancarios")
+    // CARGOS BANCARIOS (se importan como categoría "Cargos Bancarios")
     // ----------------------------------------------------------------
     const PATRONES_CARGOS_BANCARIOS = [
         /^IMP DE SELLOS/i,
@@ -17,6 +17,15 @@ const Parser = (() => {
         /^PERCEPCI[OÓ]N AFIP/i,
         /^CR\. RG 5463/i,
         /^CR\.RG 5617/i,
+        /^CR PESOS P\/DEVOLUCION/i,
+    ];
+
+    // Subconjunto de cargos bancarios que son CRÉDITOS (devoluciones),
+    // no gastos. El banco los lista con monto positivo pero reducen la deuda.
+    // Los importamos con monto negativo para que el total coincida con el banco.
+    const PATRONES_CREDITO_BANCARIO = [
+        /^CR\. RG/i,
+        /^CR\.RG/i,
         /^CR PESOS P\/DEVOLUCION/i,
     ];
 
@@ -35,6 +44,10 @@ const Parser = (() => {
     // ----------------------------------------------------------------
     function esCargoBancario(nombre) {
         return PATRONES_CARGOS_BANCARIOS.some(p => p.test(nombre));
+    }
+
+    function esCreditoBancario(nombre) {
+        return PATRONES_CREDITO_BANCARIO.some(p => p.test(nombre));
     }
 
     function debeIgnorar(nombre) {
@@ -244,6 +257,15 @@ const Parser = (() => {
 
             const { cuotaActual, cuotaTotal } = parsearCuota(cuotaRaw);
             const nombre = String(nombreRaw).trim();
+
+            // Los créditos bancarios (CR.) son devoluciones: el banco los lista
+            // con monto positivo pero reducen la deuda. Los negamos para que el
+            // total del mes coincida con lo que muestra el banco.
+            if (esCreditoBancario(nombre)) {
+                if (ars !== null) ars = -Math.abs(ars);
+                if (usd !== null) usd = -Math.abs(usd);
+                esReintegro = true;
+            }
 
             resultados.push({
                 fecha,

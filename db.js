@@ -85,15 +85,15 @@ const DB = (() => {
 
     // ----------------------------------------------------------------
     // KPIs del mes
-    // Solo gastos reales: excluye reintegros y pagos del resumen
+    // Gasto neto: suma todos los movimientos incluyendo créditos/reintegros
+    // como montos negativos, reflejando lo mismo que muestra el banco.
     // ----------------------------------------------------------------
     async function obtenerKPIs(mesPeriodo) {
         const { data, error } = await supabase
             .from('movimientos')
-            .select('monto_ars, monto_usd, es_reintegro')
+            .select('monto_ars, monto_usd')
             .eq('user_id', userId)
-            .eq('mes_periodo', mesPeriodo)
-            .eq('es_reintegro', false);
+            .eq('mes_periodo', mesPeriodo);
 
         if (error) throw error;
 
@@ -101,8 +101,8 @@ const DB = (() => {
         let totalUSD = 0;
 
         data.forEach(m => {
-            if (m.monto_ars) totalARS += parseFloat(m.monto_ars);
-            if (m.monto_usd) totalUSD += parseFloat(m.monto_usd);
+            if (m.monto_ars != null) totalARS += parseFloat(m.monto_ars);
+            if (m.monto_usd != null) totalUSD += parseFloat(m.monto_usd);
         });
 
         return {
