@@ -285,19 +285,17 @@ const Parser = (() => {
                         raw:    false,
                     });
 
-                    // Detectar formato por número de columnas y contenido de cabecera
-                    // Buscar la fila de cabecera (primera fila no vacía con contenido)
-                    const cabeceraFila = filas.find(f =>
-                        f && f.some(c => c !== null && c !== '')
+                    // Detectar formato viejo buscando "Nro. Tarjeta" en cualquiera
+                    // de las primeras filas (puede estar en la fila 2, no en la 1).
+                    const esFormatoViejo = filas.slice(0, 5).some(f =>
+                        f && String(f[0] || '').includes('Nro. Tarjeta')
                     );
 
                     let movimientos;
 
-                    if (cabeceraFila && String(cabeceraFila[0] || '').includes('Nro. Tarjeta')) {
-                        // Formato viejo
+                    if (esFormatoViejo) {
                         movimientos = parsearFormatoViejo(filas, file.name);
                     } else {
-                        // Formato nuevo (default)
                         movimientos = parsearFormatoNuevo(filas, file.name);
                     }
 
