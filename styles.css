@@ -1300,10 +1300,14 @@ select option { background-color: var(--bg-surface); }
   transition: border-color 0.25s var(--ease);
 }
 
-.import-mes-select option { background-color: var(--bg-surface); }
 .import-mes-select:focus,
 .import-mes-select:hover {
   border-color: rgba(201,169,110,0.5);
+}
+
+.import-mes-select::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
 }
 
 .import-advertencia {

@@ -774,34 +774,14 @@ async function manejarSubidaArchivo(evento) {
 // SUBIDA DE ARCHIVO — paso 2: modal de confirmación
 // ----------------------------------------------------------------
 function mostrarConfirmacionImport(mesDetectado) {
-    const select     = document.getElementById('import-select-mes');
-    const cantidad   = document.getElementById('import-cantidad');
+    const input    = document.getElementById('import-select-mes');
+    const cantidad = document.getElementById('import-cantidad');
 
-    // Generar opciones: 6 meses atrás hasta 2 meses adelante
-    select.innerHTML = '';
-    const hoy = new Date();
-    for (let i = -6; i <= 2; i++) {
-        const d   = new Date(hoy.getFullYear(), hoy.getMonth() + i, 1);
-        const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        const opt = document.createElement('option');
-        opt.value       = val;
-        opt.textContent = formatearMes(val);
-        if (val === mesDetectado) opt.selected = true;
-        select.appendChild(opt);
-    }
-    // Si el mes detectado está fuera del rango generado, agregarlo
-    if (!Array.from(select.options).some(o => o.value === mesDetectado)) {
-        const opt = document.createElement('option');
-        opt.value       = mesDetectado;
-        opt.textContent = formatearMes(mesDetectado);
-        opt.selected    = true;
-        select.insertBefore(opt, select.firstChild);
-    }
-
+    input.value = mesDetectado;
     cantidad.textContent = movimientosPendientes.length;
 
     actualizarAdvertenciaImport();
-    select.onchange = actualizarAdvertenciaImport;
+    input.oninput = actualizarAdvertenciaImport;
 
     document.getElementById('modal-confirmar-import').style.display = 'flex';
 }
