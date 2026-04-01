@@ -380,22 +380,41 @@ function dibujarEvolucion(evolucion, categorias = []) {
     const getColor = nombre => colorMap[nombre] || fallbacks[fi++ % fallbacks.length];
 
     const datasets = catOrdenadas.map((cat, idx) => {
-        const color  = getColor(cat);
-        const isTop  = idx === catOrdenadas.length - 1;
+        const color = getColor(cat);
+        const isTop = idx === catOrdenadas.length - 1;
         return {
             label:                cat,
             data:                 periodos.map(p => datos[p]?.[cat] || 0),
-            backgroundColor:      color + 'bb',       // ~73% opacidad en reposo
-            hoverBackgroundColor: color,               // sólido al hover
-            borderColor:          'transparent',
-            borderWidth:          0,
-            // Solo el segmento superior de la barra lleva esquinas redondeadas arriba
-            borderRadius: isTop
-                ? { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 }
+            backgroundColor:      color + '20',   // ~12% → vidrio translúcido
+            hoverBackgroundColor: color + '50',   // ~31% → hover suave
+            borderColor:          color + 'dd',   // ~87% → borde de cristal nítido
+            borderWidth:          1,
+            borderSkipped:        false,           // borde en los 4 lados = panel de vidrio
+            borderRadius:         isTop
+                ? { topLeft: 5, topRight: 5, bottomLeft: 0, bottomRight: 0 }
                 : 0,
-            borderSkipped: false,
         };
     });
+
+    // Plugin: halo vertical tenue en la columna activa
+    const pluginColumnGlow = {
+        id: 'columnGlow',
+        afterDraw(chart) {
+            const active = chart.tooltip?._active;
+            if (!active?.length) return;
+            const { ctx: c, chartArea: { top, bottom } } = chart;
+            const el = active[0].element;
+            const w  = el.width * 1.6;
+            c.save();
+            const grd = c.createLinearGradient(el.x - w, 0, el.x + w, 0);
+            grd.addColorStop(0,   'rgba(255,255,255,0)');
+            grd.addColorStop(0.5, 'rgba(255,255,255,0.04)');
+            grd.addColorStop(1,   'rgba(255,255,255,0)');
+            c.fillStyle = grd;
+            c.fillRect(el.x - w / 2, top, w, bottom - top);
+            c.restore();
+        },
+    };
 
     const ctx = document.getElementById('grafico-evolucion').getContext('2d');
     chartEvo = new Chart(ctx, {
@@ -405,9 +424,8 @@ function dibujarEvolucion(evolucion, categorias = []) {
             responsive:          true,
             maintainAspectRatio: false,
             animation:           { duration: 600, easing: 'easeOutQuart' },
-            // intersect: true → el tooltip se dispara solo sobre el bloque exacto
             interaction:         { mode: 'nearest', intersect: true },
-            categoryPercentage:  0.6,   // barras más delgadas, más aire entre meses
+            categoryPercentage:  0.52,
             barPercentage:       1.0,
             plugins: {
                 legend: {
@@ -424,11 +442,10 @@ function dibujarEvolucion(evolucion, categorias = []) {
                     },
                 },
                 tooltip: {
-                    // Un solo bloque → una sola línea, sin lista
                     mode:            'nearest',
                     intersect:       true,
                     backgroundColor: 'rgba(8,12,18,0.92)',
-                    borderColor:     'rgba(255,255,255,0.07)',
+                    borderColor:     'rgba(255,255,255,0.08)',
                     borderWidth:     1,
                     padding:         { x: 14, y: 10 },
                     cornerRadius:    10,
@@ -440,12 +457,9 @@ function dibujarEvolucion(evolucion, categorias = []) {
                     bodyColor:       PALETTE.textMain,
                     bodyFont:        { size: 13, family: 'DM Mono', weight: '500' },
                     callbacks: {
-                        // Título = mes (Ej: "Marzo 2026")
-                        title: items => items[0]?.label ?? '',
-                        // Cuerpo = solo la categoría hovereada
-                        label: item  => ` ${item.dataset.label}`,
-                        // Monto debajo en mono grande
-                        afterLabel: item => `  ${formatARS(item.raw)}`,
+                        title:      items => items[0]?.label ?? '',
+                        label:      item  => ` ${item.dataset.label}`,
+                        afterLabel: item  => `  ${formatARS(item.raw)}`,
                     },
                 },
                 datalabels: { display: false },
@@ -470,6 +484,7 @@ function dibujarEvolucion(evolucion, categorias = []) {
                 },
             },
         },
+        plugins: [pluginColumnGlow],
     });
 }
 
