@@ -537,10 +537,19 @@ function dibujarEvolucion(evolucion, categorias = []) {
                     titleFont:       { size: 11, family: 'DM Sans' },
                     bodyColor:       PALETTE.textMain,
                     bodyFont:        { size: 13, family: 'DM Mono', weight: '500' },
+                    footerColor:     PALETTE.textMain,
+                    footerFont:      { size: 13, family: 'DM Mono', weight: '700' },
+                    footerMarginTop: 8,
                     callbacks: {
                         title:      items => items[0]?.label ?? '',
                         label:      item  => ` ${item.dataset.label}`,
                         afterLabel: item  => `  ${formatARS(item.raw)}`,
+                        footer:     items => {
+                            const idx = items[0]?.dataIndex;
+                            if (idx === undefined) return '';
+                            const total = catOrdenadas.reduce((s, cat) => s + (datos[periodos[idx]]?.[cat] || 0), 0);
+                            return `Total  ${formatARS(total)}`;
+                        },
                     },
                 },
                 datalabels: { display: false },
