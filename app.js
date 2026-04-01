@@ -380,21 +380,56 @@ function dibujarEvolucion(evolucion, categorias = []) {
     const getColor = nombre => colorMap[nombre] || fallbacks[fi++ % fallbacks.length];
 
     const datasets = catOrdenadas.map((cat, idx) => {
-        const color = getColor(cat);
-        const isTop = idx === catOrdenadas.length - 1;
+        const color  = getColor(cat);
+        const isTop  = idx === catOrdenadas.length - 1;
+        const isBot  = idx === 0;
         return {
             label:                cat,
             data:                 periodos.map(p => datos[p]?.[cat] || 0),
-            backgroundColor:      color + '20',   // ~12% → vidrio translúcido
-            hoverBackgroundColor: color + '50',   // ~31% → hover suave
-            borderColor:          color + 'dd',   // ~87% → borde de cristal nítido
+            backgroundColor:      color + '20',
+            hoverBackgroundColor: color + '50',
+            borderColor:          color + 'dd',
             borderWidth:          1,
-            borderSkipped:        false,           // borde en los 4 lados = panel de vidrio
-            borderRadius:         isTop
-                ? { topLeft: 5, topRight: 5, bottomLeft: 0, bottomRight: 0 }
+            borderSkipped:        false,
+            // Redondeado arriba en el tope, abajo en la base, 3px en el resto
+            borderRadius: isTop && isBot ? 4
+                : isTop  ? { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }
+                : isBot  ? { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 }
                 : 0,
         };
     });
+
+    // Plugin: scale 1.05× en el segmento hovereado
+    const pluginHoverScale = {
+        id: 'hoverScale',
+        afterDatasetsDraw(chart) {
+            const active = chart.tooltip?._active;
+            if (!active?.length) return;
+
+            const { datasetIndex, index } = active[0];
+            const dataset = chart.data.datasets[datasetIndex];
+            const meta    = chart.getDatasetMeta(datasetIndex);
+            const bar     = meta.data[index];
+            if (!bar) return;
+
+            const { ctx: c } = chart;
+            const { x, y, base } = bar.getProps(['x', 'y', 'base'], true);
+            const cy = (y + base) / 2;
+
+            // Guardar el color original y subir opacidad para el redibujado escalado
+            const origBg = bar.options.backgroundColor;
+            bar.options.backgroundColor = dataset.hoverBackgroundColor;
+
+            c.save();
+            c.translate(x, cy);
+            c.scale(1.06, 1.04);
+            c.translate(-x, -cy);
+            bar.draw(c);
+            c.restore();
+
+            bar.options.backgroundColor = origBg;
+        },
+    };
 
     // Plugin: halo vertical tenue en la columna activa
     const pluginColumnGlow = {
@@ -484,7 +519,7 @@ function dibujarEvolucion(evolucion, categorias = []) {
                 },
             },
         },
-        plugins: [pluginColumnGlow],
+        plugins: [pluginColumnGlow, pluginHoverScale],
     });
 }
 
