@@ -173,27 +173,32 @@ const DB = (() => {
     async function obtenerEvolucion() {
         const { data, error } = await supabase
             .from('movimientos')
-            .select('mes_periodo, monto_ars')
+            .select('mes_periodo, monto_ars, categoria')
             .eq('user_id', userId)
             .eq('es_reintegro', false)
             .not('monto_ars', 'is', null)
+            .gt('monto_ars', 0)
             .order('mes_periodo', { ascending: true });
 
         if (error) throw error;
 
-        const mapa = {};
+        // Agrupa: { '2026-03': { 'Supermercado': 70000, 'Comida': 30000, ... } }
+        const datos = {};
+        const periodosSet = new Set();
+
         data.forEach(m => {
-            const p = m.mes_periodo;
-            if (!mapa[p]) mapa[p] = 0;
-            mapa[p] += parseFloat(m.monto_ars);
+            const p   = m.mes_periodo;
+            const cat = m.categoria || 'A Clasificar';
+            periodosSet.add(p);
+            if (!datos[p])      datos[p] = {};
+            if (!datos[p][cat]) datos[p][cat] = 0;
+            datos[p][cat] += parseFloat(m.monto_ars);
         });
 
-        return Object.entries(mapa)
-            .map(([periodo, total]) => ({
-                periodo,
-                etiqueta: formatearMes(periodo),
-                total,
-            }));
+        return {
+            periodos: [...periodosSet].sort(),
+            datos,
+        };
     }
 
     // ----------------------------------------------------------------
@@ -237,7 +242,7 @@ const DB = (() => {
     // OBTENER TODOS LOS DATOS DEL DASHBOARD en paralelo
     // ----------------------------------------------------------------
     async function obtenerDatosDashboard(mesPeriodo) {
-        const [meses, kpis, distribucion, top10, evolucion, cuotas, extracto] =
+        const [meses, kpis, distribucion, top10, evolucion, cuotas, extracto, categorias] =
             await Promise.all([
                 obtenerMeses(),
                 obtenerKPIs(mesPeriodo),
@@ -246,9 +251,10 @@ const DB = (() => {
                 obtenerEvolucion(),
                 obtenerCuotas(mesPeriodo),
                 obtenerExtracto(mesPeriodo),
+                obtenerCategorias(),
             ]);
 
-        return { meses, kpis, distribucion, top10, evolucion, cuotas, extracto };
+        return { meses, kpis, distribucion, top10, evolucion, cuotas, extracto, categorias };
     }
 
     // ----------------------------------------------------------------
@@ -341,7 +347,7 @@ const DB = (() => {
             .order('nombre');
 
         if (error) throw error;
-        return data.map(r => r.nombre);
+        return data.map(r => ({ nombre: r.nombre, color: r.color }));
     }
 
     async function guardarClasificacion(clave, nombreLimpio, categoria) {

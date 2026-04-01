@@ -197,7 +197,7 @@ function dibujarDashboard(datos) {
     dibujarKPIs(datos.kpis);
     dibujarDonut(datos.distribucion);
     dibujarBarras(datos.top10);
-    dibujarLinea(datos.evolucion);
+    dibujarEvolucion(datos.evolucion, datos.categorias);
     dibujarCuotas(datos.cuotas);
     dibujarExtracto(datos.extracto);
 }
@@ -349,103 +349,108 @@ function dibujarBarras(top10) {
 }
 
 // ----------------------------------------------------------------
-// GRÁFICO LÍNEA — Evolución histórica
+// GRÁFICO BARRAS APILADAS — Evolución histórica por categoría
 // ----------------------------------------------------------------
-function dibujarLinea(evolucion) {
-    const labels = evolucion.map(e => e.etiqueta);
-    const values = evolucion.map(e => e.total);
-
+function dibujarEvolucion(evolucion, categorias = []) {
     if (chartEvo) chartEvo.destroy();
 
-    const ctx      = document.getElementById('grafico-evolucion').getContext('2d');
-    const gradArea = ctx.createLinearGradient(0, 0, 0, 300);
-    gradArea.addColorStop(0,   'rgba(94,207,140,0.20)');
-    gradArea.addColorStop(0.5, 'rgba(79,195,195,0.08)');
-    gradArea.addColorStop(1,   'rgba(94,207,140,0.00)');
+    const { periodos = [], datos = {} } = evolucion;
+    if (!periodos.length) return;
 
-    // Plugin punto pulsante en el dato más reciente
-    const pluginPulso = {
-        id: 'pulsoDot',
-        afterDraw(chart) {
-            const meta   = chart.getDatasetMeta(0);
-            const lastIdx = chart.data.datasets[0].data.length - 1;
-            if (lastIdx < 0) return;
-            const point  = meta.data[lastIdx];
-            if (!point) return;
-            const { x, y } = point;
-            const ctx2 = chart.ctx;
-            const t    = ((Date.now() % 1800) / 1800);
-            ctx2.save();
-            ctx2.beginPath();
-            ctx2.arc(x, y, 5 * (1 + t * 1.8), 0, Math.PI * 2);
-            ctx2.strokeStyle = `rgba(94,207,140,${(1 - t) * 0.7})`;
-            ctx2.lineWidth   = 1.5;
-            ctx2.stroke();
-            ctx2.beginPath();
-            ctx2.arc(x, y, 4, 0, Math.PI * 2);
-            ctx2.fillStyle   = PALETTE.green;
-            ctx2.shadowBlur  = 10;
-            ctx2.shadowColor = PALETTE.green;
-            ctx2.fill();
-            ctx2.restore();
-        }
-    };
+    const labels = periodos.map(p => formatearMes(p));
 
+    // Mapa nombre → color desde categorías del usuario
+    const colorMap = {};
+    (categorias || []).forEach(c => { colorMap[c.nombre] = c.color; });
+
+    // Recopilar todas las categorías que aparecen en los datos
+    const catSet = new Set();
+    periodos.forEach(p => { Object.keys(datos[p] || {}).forEach(c => catSet.add(c)); });
+
+    // Ordenar por gasto total descendente para que las más grandes queden abajo
+    const catOrdenadas = [...catSet].sort((a, b) => {
+        const totalA = periodos.reduce((s, p) => s + (datos[p]?.[a] || 0), 0);
+        const totalB = periodos.reduce((s, p) => s + (datos[p]?.[b] || 0), 0);
+        return totalB - totalA;
+    });
+
+    // Paleta de fallback para categorías sin color registrado
+    const fallbacks = ['#6366f1','#f59e0b','#06b6d4','#ec4899','#84cc16',
+                       '#f97316','#8b5cf6','#10b981','#ef4444','#a78bfa'];
+    let fi = 0;
+    const getColor = nombre => colorMap[nombre] || fallbacks[fi++ % fallbacks.length];
+
+    const datasets = catOrdenadas.map(cat => ({
+        label:           cat,
+        data:            periodos.map(p => datos[p]?.[cat] || 0),
+        backgroundColor: getColor(cat),
+        borderColor:     'transparent',
+        borderRadius:    { topLeft: 0, topRight: 0, bottomLeft: 0, bottomRight: 0 },
+        borderSkipped:   false,
+    }));
+
+    // Redondear esquinas solo al dataset superior de cada barra
+    if (datasets.length) {
+        const last = datasets[datasets.length - 1];
+        last.borderRadius = { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 };
+    }
+
+    const ctx = document.getElementById('grafico-evolucion').getContext('2d');
     chartEvo = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels,
-            datasets: [{
-                label: 'Gasto Total',
-                data: values,
-                borderColor:           'rgba(238,242,247,0.6)',
-                backgroundColor:       gradArea,
-                borderWidth:           1.5,
-                fill:                  true,
-                tension:               0.35,
-                pointRadius:           0,
-                pointHoverRadius:      5,
-                pointHoverBackgroundColor: PALETTE.textMain,
-            }]
-        },
+        type: 'bar',
+        data: { labels, datasets },
         options: {
-            responsive: true,
+            responsive:          true,
             maintainAspectRatio: false,
-            animation: { duration: 1000, easing: 'easeInOutQuart' },
-            interaction: { mode: 'index', intersect: false },
+            animation:           { duration: 700, easing: 'easeInOutQuart' },
+            interaction:         { mode: 'index', intersect: false },
             plugins: {
-                legend: { display: false },
+                legend: {
+                    display:  true,
+                    position: 'bottom',
+                    labels: {
+                        color:       PALETTE.textMuted,
+                        font:        { size: 10, family: 'DM Sans' },
+                        boxWidth:    10,
+                        boxHeight:   10,
+                        borderRadius:3,
+                        padding:     8,
+                        useBorderRadius: true,
+                    },
+                },
                 tooltip: {
                     callbacks: {
                         title: ctx => ctx[0].label,
-                        label: ctx => ` ${formatARS(ctx.raw)}`,
-                    }
-                }
+                        label: ctx => ` ${ctx.dataset.label}: ${formatARS(ctx.raw)}`,
+                        footer: items => {
+                            const total = items.reduce((s, i) => s + i.raw, 0);
+                            return `Total: ${formatARS(total)}`;
+                        },
+                    },
+                },
+                datalabels: { display: false },
             },
             scales: {
                 x: {
-                    grid: { display: false },
-                    border: { display: false },
-                    ticks: { color: PALETTE.textMuted, font: { size: 10 } }
+                    stacked: true,
+                    grid:    { display: false },
+                    border:  { display: false },
+                    ticks:   { color: PALETTE.textMuted, font: { size: 10 } },
                 },
                 y: {
-                    grid: { color: PALETTE.border, drawBorder: false },
-                    border: { display: false },
-                    ticks: {
-                        color: PALETTE.textMuted,
-                        font: { size: 10 },
-                        callback: val => formatARS(val, true),
+                    stacked: true,
+                    grid:    { color: PALETTE.border },
+                    border:  { display: false },
+                    ticks:   {
+                        color:         PALETTE.textMuted,
+                        font:          { size: 10 },
+                        callback:      val => formatARS(val, true),
                         maxTicksLimit: 5,
-                    }
-                }
-            }
+                    },
+                },
+            },
         },
-        plugins: [pluginPulso]
     });
-
-    // Animar el pulso continuamente
-    const animLoop = () => { if (chartEvo) { chartEvo.draw(); requestAnimationFrame(animLoop); } };
-    requestAnimationFrame(animLoop);
 }
 
 // ----------------------------------------------------------------
@@ -865,7 +870,8 @@ async function abrirModalClasificar() {
 
         let opcionesCat = `<option value="">— Seleccionar —</option>`;
         categorias.forEach(cat => {
-            opcionesCat += `<option value="${cat}">${cat}</option>`;
+            const nombre = cat.nombre ?? cat;
+            opcionesCat += `<option value="${nombre}">${nombre}</option>`;
         });
 
         let html = `
