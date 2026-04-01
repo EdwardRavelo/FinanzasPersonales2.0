@@ -194,8 +194,12 @@ async function cargarMes(mes) {
 // DIBUJAR DASHBOARD
 // ----------------------------------------------------------------
 function dibujarDashboard(datos) {
+    // Mapa nombre→color compartido por todos los gráficos para coherencia visual
+    const colorMap = {};
+    (datos.categorias || []).forEach(c => { colorMap[c.nombre] = c.color; });
+
     dibujarKPIs(datos.kpis);
-    dibujarDonut(datos.distribucion);
+    dibujarDonut(datos.distribucion, colorMap);
     dibujarBarras(datos.top10);
     dibujarEvolucion(datos.evolucion, datos.categorias);
     dibujarCuotas(datos.cuotas);
@@ -217,10 +221,13 @@ function dibujarKPIs(kpis) {
 // ----------------------------------------------------------------
 // GRÁFICO DONUT — Distribución por categoría
 // ----------------------------------------------------------------
-function dibujarDonut(distribucion) {
+function dibujarDonut(distribucion, colorMap = {}) {
     const labels = distribucion.map(d => d.categoria);
     const values = distribucion.map(d => d.total);
     const total  = values.reduce((a, b) => a + b, 0);
+
+    // Colores coherentes con el resto del dashboard
+    const colores = labels.map(l => colorMap[l] || PALETTE.donut[labels.indexOf(l)] || '#94a3b8');
 
     if (chartTorta) chartTorta.destroy();
 
@@ -248,13 +255,14 @@ function dibujarDonut(distribucion) {
         data: {
             labels,
             datasets: [{
-                data: values,
-                backgroundColor: PALETTE.donut.slice(0, labels.length),
-                borderWidth: 2,
-                borderColor: '#080c12',
+                data:             values,
+                backgroundColor:  colores.map(c => c + 'bb'),   // ~73% — melt base
+                hoverBackgroundColor: colores.map(c => c + 'ee'), // ~93% — hover
+                borderWidth:      2,
+                borderColor:      '#080c12',
                 hoverBorderWidth: 0,
-                hoverOffset: 8,
-                spacing: 2,
+                hoverOffset:      10,
+                spacing:          2,
             }]
         },
         options: {
@@ -291,23 +299,42 @@ function dibujarBarras(top10) {
     const values = top10.map(t => t.total);
     const maxVal = Math.max(...values, 1);
 
-    const colores = values.map((_, i) => {
-        const alpha = 0.9 - (i / values.length) * 0.5;
-        return `rgba(201,169,110,${alpha})`;
-    });
-
     if (chartTop) chartTop.destroy();
+
+    // Plugin: gradiente horizontal — opaco en el eje, se derrite hacia la derecha
+    const pluginGradH = {
+        id: 'gradH',
+        beforeDatasetsDraw(chart) {
+            const { ctx } = chart;
+            chart.data.datasets.forEach((dataset, i) => {
+                const meta = chart.getDatasetMeta(i);
+                if (meta.hidden) return;
+                meta.data.forEach(bar => {
+                    const { x, base } = bar.getProps(['x', 'base'], true);
+                    const x0 = Math.min(x, base);
+                    const x1 = Math.max(x, base);
+                    if (x1 - x0 < 1) return;
+                    const grad = ctx.createLinearGradient(x0, 0, x1, 0);
+                    grad.addColorStop(0,   'rgba(201,169,110,0.75)');
+                    grad.addColorStop(1,   'rgba(201,169,110,0.04)');
+                    bar.options.backgroundColor = grad;
+                });
+            });
+        }
+    };
 
     chartTop = new Chart(document.getElementById('grafico-top'), {
         type: 'bar',
         data: {
             labels,
             datasets: [{
-                data: values,
-                backgroundColor: colores,
-                borderRadius: 4,
-                borderSkipped: 'left',
-                barThickness: 11,
+                data:            values,
+                backgroundColor: 'rgba(201,169,110,0.4)',  // placeholder → plugin
+                borderColor:     'rgba(201,169,110,0.75)',
+                borderWidth:     { top: 0, right: 0, bottom: 0, left: 2 },
+                borderSkipped:   false,
+                borderRadius:    { topRight: 3, bottomRight: 3, topLeft: 0, bottomLeft: 0 },
+                barThickness:    11,
             }]
         },
         options: {
@@ -337,14 +364,11 @@ function dibujarBarras(top10) {
                 y: {
                     grid: { display: false },
                     border: { display: false },
-                    ticks: {
-                        color: PALETTE.textMuted,
-                        font: { size: 11, family: "'DM Mono',monospace" },
-                    }
+                    ticks: { color: PALETTE.textMuted, font: { size: 11, family: "'DM Mono',monospace" } }
                 }
             }
         },
-        plugins: [ChartDataLabels]
+        plugins: [ChartDataLabels, pluginGradH]
     });
 }
 
@@ -380,28 +404,54 @@ function dibujarEvolucion(evolucion, categorias = []) {
     const getColor = nombre => colorMap[nombre] || fallbacks[fi++ % fallbacks.length];
 
     const datasets = catOrdenadas.map((cat, idx) => {
-        const color  = getColor(cat);
-        const isTop  = idx === catOrdenadas.length - 1;
-        const isBot  = idx === 0;
+        const color = getColor(cat);
+        const isTop = idx === catOrdenadas.length - 1;
+        const isBot = idx === 0;
         return {
-            label:                cat,
-            data:                 periodos.map(p => datos[p]?.[cat] || 0),
-            backgroundColor:      color + '20',
-            hoverBackgroundColor: color + '50',
-            borderColor:          color + 'dd',
-            borderWidth:          1,
-            borderSkipped:        false,
-            // Redondeado arriba en el tope, abajo en la base, 3px en el resto
-            borderRadius: isTop && isBot ? 4
+            label:        cat,
+            data:         periodos.map(p => datos[p]?.[cat] || 0),
+            // Placeholder — el plugin de gradiente lo sobreescribe en runtime
+            backgroundColor: color + '30',
+            borderColor:  color + 'ee',
+            // Borde solo en el top de cada segmento: efecto "glass shelf"
+            borderWidth:  { top: 1, right: 0, bottom: 0, left: 0 },
+            borderSkipped: false,
+            borderRadius:  isTop && isBot ? { topLeft: 4, topRight: 4, bottomLeft: 4, bottomRight: 4 }
                 : isTop  ? { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }
                 : isBot  ? { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 }
                 : 0,
+            // Guardamos el hex puro para que el plugin pueda crear gradientes
+            _hex: color,
         };
     });
 
-    // Plugin: scale 1.05× en el segmento hovereado
-    const pluginHoverScale = {
-        id: 'hoverScale',
+    // Plugin: crea gradiente vertical por segmento antes de dibujar
+    const pluginGradV = {
+        id: 'gradV',
+        beforeDatasetsDraw(chart) {
+            const { ctx } = chart;
+            chart.data.datasets.forEach((dataset, i) => {
+                const meta = chart.getDatasetMeta(i);
+                if (meta.hidden) return;
+                const hex = dataset._hex;
+                if (!hex) return;
+                meta.data.forEach(bar => {
+                    const { y, base } = bar.getProps(['y', 'base'], true);
+                    const y0 = Math.min(y, base);
+                    const y1 = Math.max(y, base);
+                    if (y1 - y0 < 1) return;
+                    const grad = ctx.createLinearGradient(0, y0, 0, y1);
+                    grad.addColorStop(0, hex + '6e');  // ~43% opaco arriba
+                    grad.addColorStop(1, hex + '08');  // ~3% abajo
+                    bar.options.backgroundColor = grad;
+                });
+            });
+        }
+    };
+
+    // Plugin: hover — boost del gradiente en el segmento activo + glow de columna
+    const pluginHoverGlow = {
+        id: 'hoverGlow',
         afterDatasetsDraw(chart) {
             const active = chart.tooltip?._active;
             if (!active?.length) return;
@@ -412,43 +462,39 @@ function dibujarEvolucion(evolucion, categorias = []) {
             const bar     = meta.data[index];
             if (!bar) return;
 
-            const { ctx: c } = chart;
+            const hex = dataset._hex;
+            if (!hex) return;
+
+            const { ctx } = chart;
             const { x, y, base } = bar.getProps(['x', 'y', 'base'], true);
-            const cy = (y + base) / 2;
+            const y0 = Math.min(y, base);
+            const y1 = Math.max(y, base);
+            if (y1 - y0 < 1) return;
 
-            // Guardar el color original y subir opacidad para el redibujado escalado
+            // Gradiente más opaco para el segmento activo
+            const gradHover = ctx.createLinearGradient(0, y0, 0, y1);
+            gradHover.addColorStop(0, hex + 'b0');  // ~69%
+            gradHover.addColorStop(1, hex + '18');  // ~9%
+
             const origBg = bar.options.backgroundColor;
-            bar.options.backgroundColor = dataset.hoverBackgroundColor;
-
-            c.save();
-            c.translate(x, cy);
-            c.scale(1.06, 1.04);
-            c.translate(-x, -cy);
-            bar.draw(c);
-            c.restore();
-
+            bar.options.backgroundColor = gradHover;
+            ctx.save();
+            bar.draw(ctx);
+            ctx.restore();
             bar.options.backgroundColor = origBg;
-        },
-    };
 
-    // Plugin: halo vertical tenue en la columna activa
-    const pluginColumnGlow = {
-        id: 'columnGlow',
-        afterDraw(chart) {
-            const active = chart.tooltip?._active;
-            if (!active?.length) return;
-            const { ctx: c, chartArea: { top, bottom } } = chart;
-            const el = active[0].element;
-            const w  = el.width * 1.6;
-            c.save();
-            const grd = c.createLinearGradient(el.x - w, 0, el.x + w, 0);
-            grd.addColorStop(0,   'rgba(255,255,255,0)');
-            grd.addColorStop(0.5, 'rgba(255,255,255,0.04)');
-            grd.addColorStop(1,   'rgba(255,255,255,0)');
-            c.fillStyle = grd;
-            c.fillRect(el.x - w / 2, top, w, bottom - top);
-            c.restore();
-        },
+            // Halo vertical teñido con el color de la categoría
+            const { top, bottom } = chart.chartArea;
+            const w = bar.width * 2.2;
+            ctx.save();
+            const glow = ctx.createLinearGradient(x - w, 0, x + w, 0);
+            glow.addColorStop(0,   hex + '00');
+            glow.addColorStop(0.5, hex + '16');
+            glow.addColorStop(1,   hex + '00');
+            ctx.fillStyle = glow;
+            ctx.fillRect(x - w / 2, top, w, bottom - top);
+            ctx.restore();
+        }
     };
 
     const ctx = document.getElementById('grafico-evolucion').getContext('2d');
@@ -519,7 +565,7 @@ function dibujarEvolucion(evolucion, categorias = []) {
                 },
             },
         },
-        plugins: [pluginColumnGlow, pluginHoverScale],
+        plugins: [pluginGradV, pluginHoverGlow],
     });
 }
 
