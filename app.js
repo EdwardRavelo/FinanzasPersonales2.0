@@ -441,8 +441,8 @@ function dibujarEvolucion(evolucion, categorias = []) {
                     const y1 = Math.max(y, base);
                     if (y1 - y0 < 1) return;
                     const grad = ctx.createLinearGradient(0, y0, 0, y1);
-                    grad.addColorStop(0, hex + '6e');  // ~43% opaco arriba
-                    grad.addColorStop(1, hex + '08');  // ~3% abajo
+                    grad.addColorStop(0, hex + '08');  // ~3% arriba
+                    grad.addColorStop(1, hex + '6e');  // ~43% opaco abajo
                     bar.options.backgroundColor = grad;
                 });
             });
@@ -473,8 +473,8 @@ function dibujarEvolucion(evolucion, categorias = []) {
 
             // Gradiente más opaco para el segmento activo
             const gradHover = ctx.createLinearGradient(0, y0, 0, y1);
-            gradHover.addColorStop(0, hex + 'b0');  // ~69%
-            gradHover.addColorStop(1, hex + '18');  // ~9%
+            gradHover.addColorStop(0, hex + '18');  // ~9%
+            gradHover.addColorStop(1, hex + 'b0');  // ~69%
 
             const origBg = bar.options.backgroundColor;
             bar.options.backgroundColor = gradHover;
@@ -506,7 +506,7 @@ function dibujarEvolucion(evolucion, categorias = []) {
             maintainAspectRatio: false,
             animation:           { duration: 600, easing: 'easeOutQuart' },
             interaction:         { mode: 'nearest', intersect: true },
-            categoryPercentage:  0.52,
+            categoryPercentage:  0.78,
             barPercentage:       1.0,
             plugins: {
                 legend: {
