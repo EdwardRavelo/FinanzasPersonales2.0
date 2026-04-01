@@ -367,33 +367,35 @@ function dibujarEvolucion(evolucion, categorias = []) {
     const catSet = new Set();
     periodos.forEach(p => { Object.keys(datos[p] || {}).forEach(c => catSet.add(c)); });
 
-    // Ordenar por gasto total descendente para que las más grandes queden abajo
+    // Ordenar por gasto total descendente (las más grandes quedan abajo en el stack)
     const catOrdenadas = [...catSet].sort((a, b) => {
         const totalA = periodos.reduce((s, p) => s + (datos[p]?.[a] || 0), 0);
         const totalB = periodos.reduce((s, p) => s + (datos[p]?.[b] || 0), 0);
         return totalB - totalA;
     });
 
-    // Paleta de fallback para categorías sin color registrado
     const fallbacks = ['#6366f1','#f59e0b','#06b6d4','#ec4899','#84cc16',
                        '#f97316','#8b5cf6','#10b981','#ef4444','#a78bfa'];
     let fi = 0;
     const getColor = nombre => colorMap[nombre] || fallbacks[fi++ % fallbacks.length];
 
-    const datasets = catOrdenadas.map(cat => ({
-        label:           cat,
-        data:            periodos.map(p => datos[p]?.[cat] || 0),
-        backgroundColor: getColor(cat),
-        borderColor:     'transparent',
-        borderRadius:    { topLeft: 0, topRight: 0, bottomLeft: 0, bottomRight: 0 },
-        borderSkipped:   false,
-    }));
-
-    // Redondear esquinas solo al dataset superior de cada barra
-    if (datasets.length) {
-        const last = datasets[datasets.length - 1];
-        last.borderRadius = { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 };
-    }
+    const datasets = catOrdenadas.map((cat, idx) => {
+        const color  = getColor(cat);
+        const isTop  = idx === catOrdenadas.length - 1;
+        return {
+            label:                cat,
+            data:                 periodos.map(p => datos[p]?.[cat] || 0),
+            backgroundColor:      color + 'bb',       // ~73% opacidad en reposo
+            hoverBackgroundColor: color,               // sólido al hover
+            borderColor:          'transparent',
+            borderWidth:          0,
+            // Solo el segmento superior de la barra lleva esquinas redondeadas arriba
+            borderRadius: isTop
+                ? { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 }
+                : 0,
+            borderSkipped: false,
+        };
+    });
 
     const ctx = document.getElementById('grafico-evolucion').getContext('2d');
     chartEvo = new Chart(ctx, {
@@ -402,30 +404,48 @@ function dibujarEvolucion(evolucion, categorias = []) {
         options: {
             responsive:          true,
             maintainAspectRatio: false,
-            animation:           { duration: 700, easing: 'easeInOutQuart' },
-            interaction:         { mode: 'index', intersect: false },
+            animation:           { duration: 600, easing: 'easeOutQuart' },
+            // intersect: true → el tooltip se dispara solo sobre el bloque exacto
+            interaction:         { mode: 'nearest', intersect: true },
+            categoryPercentage:  0.6,   // barras más delgadas, más aire entre meses
+            barPercentage:       1.0,
             plugins: {
                 legend: {
                     display:  true,
                     position: 'bottom',
                     labels: {
-                        color:       PALETTE.textMuted,
-                        font:        { size: 10, family: 'DM Sans' },
-                        boxWidth:    10,
-                        boxHeight:   10,
-                        borderRadius:3,
-                        padding:     8,
+                        color:           PALETTE.textMuted,
+                        font:            { size: 10, family: 'DM Sans' },
+                        boxWidth:        8,
+                        boxHeight:       8,
+                        borderRadius:    3,
+                        padding:         10,
                         useBorderRadius: true,
                     },
                 },
                 tooltip: {
+                    // Un solo bloque → una sola línea, sin lista
+                    mode:            'nearest',
+                    intersect:       true,
+                    backgroundColor: 'rgba(8,12,18,0.92)',
+                    borderColor:     'rgba(255,255,255,0.07)',
+                    borderWidth:     1,
+                    padding:         { x: 14, y: 10 },
+                    cornerRadius:    10,
+                    displayColors:   true,
+                    boxWidth:        8,
+                    boxHeight:       8,
+                    titleColor:      PALETTE.textMuted,
+                    titleFont:       { size: 11, family: 'DM Sans' },
+                    bodyColor:       PALETTE.textMain,
+                    bodyFont:        { size: 13, family: 'DM Mono', weight: '500' },
                     callbacks: {
-                        title: ctx => ctx[0].label,
-                        label: ctx => ` ${ctx.dataset.label}: ${formatARS(ctx.raw)}`,
-                        footer: items => {
-                            const total = items.reduce((s, i) => s + i.raw, 0);
-                            return `Total: ${formatARS(total)}`;
-                        },
+                        // Título = mes (Ej: "Marzo 2026")
+                        title: items => items[0]?.label ?? '',
+                        // Cuerpo = solo la categoría hovereada
+                        label: item  => ` ${item.dataset.label}`,
+                        // Monto debajo en mono grande
+                        afterLabel: item => `  ${formatARS(item.raw)}`,
                     },
                 },
                 datalabels: { display: false },
