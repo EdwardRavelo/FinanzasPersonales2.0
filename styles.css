@@ -229,7 +229,7 @@ select option { background-color: var(--bg-surface); }
   gap: 16px;
   flex-wrap: wrap;
   margin: 0 auto 32px;
-  max-width: 1440px;
+  max-width: 960px;
   width: 95%;
 }
 
@@ -242,6 +242,7 @@ select option { background-color: var(--bg-surface); }
   border-radius: var(--radius-lg);
   flex: 1;
   min-width: 220px;
+  max-width: 320px;
   text-align: left;
   transition: transform 0.35s var(--ease), border-color 0.35s var(--ease), box-shadow 0.35s var(--ease);
   position: relative;
@@ -732,9 +733,9 @@ select option { background-color: var(--bg-surface); }
   .chart-container { min-height: 220px; }
 
   /* KPI */
-  .contenedor-kpi { width: 100%; }
-  .tarjeta { min-width: unset; padding: 22px 20px; }
-  .valor-kpi { font-size: clamp(28px, 8vw, 38px); }
+  .contenedor-kpi { width: 100%; max-width: 100%; }
+  .tarjeta { min-width: unset; max-width: 100%; padding: 22px 20px; }
+  .valor-kpi { font-size: clamp(22px, 7vw, 34px); }
 
   /* Extracto — controles apilados */
   .extracto-header {
@@ -1078,7 +1079,7 @@ select option { background-color: var(--bg-surface); }
 /* (reglas mobile del banner y cabecera consolidadas en el bloque @media 640px de arriba) */
 
 /* ================================================================
-   KPI — versión simplificada (solo Total del Mes)
+   KPI — tres tarjetas
    ================================================================ */
 .kpi-meta {
   font-family: var(--font-mono);
@@ -1086,6 +1087,37 @@ select option { background-color: var(--bg-surface); }
   color: var(--text-dim);
   margin-top: 4px;
   letter-spacing: 0.06em;
+}
+
+.kpi-usd-card .valor-kpi {
+  color: var(--cyan);
+  text-shadow: 0 0 30px rgba(79, 195, 195, 0.2);
+}
+
+.kpi-mov .valor-kpi {
+  color: var(--text-main);
+}
+
+/* ================================================================
+   CUOTAS — fila de total
+   ================================================================ */
+.cuotas-total-row td {
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.cuotas-total-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+}
+
+.cuotas-total-valor {
+  color: var(--gold) !important;
+  font-size: 15px !important;
 }
 
 /* ================================================================

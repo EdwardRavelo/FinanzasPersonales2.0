@@ -92,7 +92,6 @@
       <header class="cabecera">
         <div class="cabecera-top">
           <div>
-            <p class="cabecera-subtitulo">Observatorio Financiero Personal</p>
             <h1>Dashboard de Finanzas</h1>
           </div>
           <button id="btn-logout" class="btn-logout" title="Cerrar sesión">
@@ -132,18 +131,32 @@
       </div>
 
       <!-- ----------------------------------------------------------
-           TARJETA KPI (una sola: Total del Mes)
+           TARJETAS KPI (tres: ARS, USD, Movimientos)
       ---------------------------------------------------------- -->
       <div class="contenedor-kpi">
 
         <div class="tarjeta kpi-total">
-          <div class="titulo-kpi">Total del Mes</div>
+          <div class="titulo-kpi">Total consumo ARS</div>
           <div class="valor-kpi" id="val-total">
             <span class="skeleton skeleton-kpi"></span>
           </div>
-          <div class="kpi-usd" id="val-total-usd"></div>
-          <div class="kpi-meta" id="val-movimientos"></div>
           <span class="tarjeta-icon" aria-hidden="true">◉</span>
+        </div>
+
+        <div class="tarjeta kpi-usd-card">
+          <div class="titulo-kpi">Total consumo USD</div>
+          <div class="valor-kpi" id="val-total-usd">
+            <span class="skeleton skeleton-kpi"></span>
+          </div>
+          <span class="tarjeta-icon" aria-hidden="true">◈</span>
+        </div>
+
+        <div class="tarjeta kpi-mov">
+          <div class="titulo-kpi">Movimientos del mes</div>
+          <div class="valor-kpi" id="val-movimientos">
+            <span class="skeleton skeleton-kpi"></span>
+          </div>
+          <span class="tarjeta-icon" aria-hidden="true">◎</span>
         </div>
 
       </div>
@@ -190,6 +203,7 @@
                 </tr>
               </thead>
               <tbody id="cuerpo-cuotas"></tbody>
+              <tfoot id="pie-cuotas"></tfoot>
             </table>
           </div>
         </div>

@@ -213,9 +213,9 @@ function dibujarKPIs(kpis) {
     document.getElementById('val-total').textContent =
         formatARS(kpis.totalARS);
     document.getElementById('val-total-usd').textContent =
-        kpis.totalUSD > 0 ? `u$s ${kpis.totalUSD.toFixed(2)}` : '';
+        kpis.totalUSD > 0 ? `u$s ${kpis.totalUSD.toFixed(2)}` : '—';
     document.getElementById('val-movimientos').textContent =
-        `${kpis.cantidadMovimientos} movimientos`;
+        kpis.cantidadMovimientos;
 }
 
 // ----------------------------------------------------------------
@@ -301,36 +301,14 @@ function dibujarBarras(top10) {
 
     if (chartTop) chartTop.destroy();
 
-    // Plugin: gradiente horizontal — opaco en el eje, se derrite hacia la derecha
-    const pluginGradH = {
-        id: 'gradH',
-        beforeDatasetsDraw(chart) {
-            const { ctx } = chart;
-            chart.data.datasets.forEach((dataset, i) => {
-                const meta = chart.getDatasetMeta(i);
-                if (meta.hidden) return;
-                meta.data.forEach(bar => {
-                    const { x, base } = bar.getProps(['x', 'base'], true);
-                    const x0 = Math.min(x, base);
-                    const x1 = Math.max(x, base);
-                    if (x1 - x0 < 1) return;
-                    const grad = ctx.createLinearGradient(x0, 0, x1, 0);
-                    grad.addColorStop(0,   'rgba(201,169,110,0.75)');
-                    grad.addColorStop(1,   'rgba(201,169,110,0.04)');
-                    bar.options.backgroundColor = grad;
-                });
-            });
-        }
-    };
-
     chartTop = new Chart(document.getElementById('grafico-top'), {
         type: 'bar',
         data: {
             labels,
             datasets: [{
                 data:            values,
-                backgroundColor: 'rgba(201,169,110,0.4)',  // placeholder → plugin
-                borderColor:     'rgba(201,169,110,0.75)',
+                backgroundColor: 'rgba(201,169,110,0.25)',
+                borderColor:     'rgba(201,169,110,0.65)',
                 borderWidth:     { top: 0, right: 0, bottom: 0, left: 2 },
                 borderSkipped:   false,
                 borderRadius:    { topRight: 3, bottomRight: 3, topLeft: 0, bottomLeft: 0 },
@@ -341,7 +319,7 @@ function dibujarBarras(top10) {
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
-            animation: { duration: 800, easing: 'easeOutQuart' },
+            animation: false,
             layout: { padding: { right: 70 } },
             plugins: {
                 legend: { display: false },
@@ -368,7 +346,7 @@ function dibujarBarras(top10) {
                 }
             }
         },
-        plugins: [ChartDataLabels, pluginGradH]
+        plugins: [ChartDataLabels]
     });
 }
 
@@ -408,94 +386,18 @@ function dibujarEvolucion(evolucion, categorias = []) {
         const isTop = idx === catOrdenadas.length - 1;
         const isBot = idx === 0;
         return {
-            label:        cat,
-            data:         periodos.map(p => datos[p]?.[cat] || 0),
-            // Placeholder — el plugin de gradiente lo sobreescribe en runtime
-            backgroundColor: color + '30',
-            borderColor:  color + 'ee',
-            // Borde solo en el top de cada segmento: efecto "glass shelf"
-            borderWidth:  { top: 1, right: 0, bottom: 0, left: 0 },
-            borderSkipped: false,
-            borderRadius:  isTop && isBot ? { topLeft: 4, topRight: 4, bottomLeft: 4, bottomRight: 4 }
+            label:           cat,
+            data:            periodos.map(p => datos[p]?.[cat] || 0),
+            backgroundColor: color + '99',
+            borderColor:     color + 'cc',
+            borderWidth:     { top: 1, right: 0, bottom: 0, left: 0 },
+            borderSkipped:   false,
+            borderRadius:    isTop && isBot ? { topLeft: 4, topRight: 4, bottomLeft: 4, bottomRight: 4 }
                 : isTop  ? { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }
                 : isBot  ? { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 }
                 : 0,
-            // Guardamos el hex puro para que el plugin pueda crear gradientes
-            _hex: color,
         };
     });
-
-    // Plugin: crea gradiente vertical por segmento antes de dibujar
-    const pluginGradV = {
-        id: 'gradV',
-        beforeDatasetsDraw(chart) {
-            const { ctx } = chart;
-            chart.data.datasets.forEach((dataset, i) => {
-                const meta = chart.getDatasetMeta(i);
-                if (meta.hidden) return;
-                const hex = dataset._hex;
-                if (!hex) return;
-                meta.data.forEach(bar => {
-                    const { y, base } = bar.getProps(['y', 'base'], true);
-                    const y0 = Math.min(y, base);
-                    const y1 = Math.max(y, base);
-                    if (y1 - y0 < 1) return;
-                    const grad = ctx.createLinearGradient(0, y0, 0, y1);
-                    grad.addColorStop(0, hex + '08');  // ~3% arriba
-                    grad.addColorStop(1, hex + '6e');  // ~43% opaco abajo
-                    bar.options.backgroundColor = grad;
-                });
-            });
-        }
-    };
-
-    // Plugin: hover — boost del gradiente en el segmento activo + glow de columna
-    const pluginHoverGlow = {
-        id: 'hoverGlow',
-        afterDatasetsDraw(chart) {
-            const active = chart.tooltip?._active;
-            if (!active?.length) return;
-
-            const { datasetIndex, index } = active[0];
-            const dataset = chart.data.datasets[datasetIndex];
-            const meta    = chart.getDatasetMeta(datasetIndex);
-            const bar     = meta.data[index];
-            if (!bar) return;
-
-            const hex = dataset._hex;
-            if (!hex) return;
-
-            const { ctx } = chart;
-            const { x, y, base } = bar.getProps(['x', 'y', 'base'], true);
-            const y0 = Math.min(y, base);
-            const y1 = Math.max(y, base);
-            if (y1 - y0 < 1) return;
-
-            // Gradiente más opaco para el segmento activo
-            const gradHover = ctx.createLinearGradient(0, y0, 0, y1);
-            gradHover.addColorStop(0, hex + '18');  // ~9%
-            gradHover.addColorStop(1, hex + 'b0');  // ~69%
-
-            const origBg = bar.options.backgroundColor;
-            bar.options.backgroundColor = gradHover;
-            ctx.save();
-            bar.draw(ctx);
-            ctx.restore();
-            bar.options.backgroundColor = origBg;
-
-            // Halo vertical teñido con el color de la categoría
-            const { top, bottom } = chart.chartArea;
-            const w = bar.width * 2.2;
-            ctx.save();
-            const glow = ctx.createLinearGradient(x - w, 0, x + w, 0);
-            glow.addColorStop(0,   hex + '00');
-            glow.addColorStop(0.5, hex + '16');
-            glow.addColorStop(1,   hex + '00');
-            ctx.fillStyle = glow;
-            ctx.fillRect(x - w / 2, top, w, bottom - top);
-            ctx.restore();
-        }
-    };
 
     const ctx = document.getElementById('grafico-evolucion').getContext('2d');
     chartEvo = new Chart(ctx, {
@@ -574,7 +476,7 @@ function dibujarEvolucion(evolucion, categorias = []) {
                 },
             },
         },
-        plugins: [pluginGradV, pluginHoverGlow],
+        plugins: [],
     });
 }
 
@@ -583,14 +485,18 @@ function dibujarEvolucion(evolucion, categorias = []) {
 // ----------------------------------------------------------------
 function dibujarCuotas(cuotas) {
     const tbody = document.getElementById('cuerpo-cuotas');
+    const tfoot = document.getElementById('pie-cuotas');
     tbody.innerHTML = '';
+    if (tfoot) tfoot.innerHTML = '';
 
     if (!cuotas.length) {
         tbody.innerHTML = `<tr><td colspan="3" class="tabla-vacia">Sin cuotas pendientes este mes</td></tr>`;
         return;
     }
 
+    let total = 0;
     cuotas.forEach(item => {
+        total += item.monto;
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="comercio-col">${item.comercio}</td>
@@ -599,6 +505,15 @@ function dibujarCuotas(cuotas) {
         `;
         tbody.appendChild(tr);
     });
+
+    if (tfoot) {
+        tfoot.innerHTML = `
+            <tr class="cuotas-total-row">
+                <td colspan="2" class="cuotas-total-label">Total cuotas</td>
+                <td class="monto-tabla cuotas-total-valor">${formatARS(total)}</td>
+            </tr>
+        `;
+    }
 }
 
 // ----------------------------------------------------------------
@@ -1167,18 +1082,16 @@ function obtenerColorCategoria(categoria) {
 
 function mostrarSkeletons() {
     const skel = (cls) => `<span class="skeleton ${cls}"></span>`;
-    const elTotal = document.getElementById('val-total');
-    const elUsd   = document.getElementById('val-total-usd');
-    const elMov   = document.getElementById('val-movimientos');
-    if (elTotal) elTotal.innerHTML       = skel('skeleton-kpi');
-    if (elUsd)   elUsd.innerHTML         = skel('skeleton-sub');
-    if (elMov)   elMov.innerHTML         = skel('skeleton-sub');
+    ['val-total', 'val-total-usd', 'val-movimientos'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = skel('skeleton-kpi');
+    });
 }
 
 function ocultarSkeletons() {
     document.getElementById('val-total').textContent       = '—';
-    document.getElementById('val-total-usd').textContent   = '';
-    document.getElementById('val-movimientos').textContent = 'Sin datos aún';
+    document.getElementById('val-total-usd').textContent   = '—';
+    document.getElementById('val-movimientos').textContent = '0';
 }
 
 function mostrarError(msg) {
