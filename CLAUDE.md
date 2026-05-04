@@ -71,13 +71,17 @@ Three filter lists applied during parsing:
 
 ### App State (`app.js`)
 
-Global variables (no state manager): `mesActivo`, `sessionUsuario`, `extractoTodos`, `extractoPagina` (pagination at 30 rows/page), Chart.js instances (`chartTorta`, `chartTop`, `chartEvo`), and import state (`movimientosPendientes`, `mesesConDataActual`).
+Global variables (no state manager): `mesActivo`, `sessionUsuario`, `extractoTodos`, `extractoPagina` (pagination at 30 rows/page), Chart.js instances (`chartTorta`, `chartTop`, `chartEvo`), import state (`movimientosPendientes`, `mesesConDataActual`), and `datosActuales` (last fetched dashboard payload — stored so charts can be redrawn on resize without re-fetching).
 
 On load: checks for an existing Supabase session in localStorage first; if none, checks for `?code=` (PKCE) or `#access_token=` (implicit) in the URL before showing the login screen. A 10-second timeout prevents a permanent black screen if the token is expired.
 
 `dibujarDashboard(datos)` is the single entry point for rendering: it builds a shared `colorMap` (category name → hex color) from `datos.categorias` and passes it to every chart so colors stay consistent across the donut, bar chart, and stacked evolution chart.
 
 Each of the three Chart.js instances is a module-level global. Every render destroys the old instance before creating a new one (`if (chartX) chartX.destroy()`). Gradient fills are implemented as inline Chart.js plugins defined per chart (`pluginGradH` for horizontal bars, `pluginGradV` for stacked vertical bars).
+
+The `PALETTE` constant in `app.js` defines all shared colors (`gold`, `cyan`, `green`, `textMuted`, `textMain`, `border`, and the `donut` array). It is also used to set `Chart.defaults` globally (tooltip style, font family). Formatting utilities live at the bottom of `app.js`: `formatARS(n)` (Argentine peso locale), `formatFecha(iso)`, `formatearMes(yyyy-mm)`. `obtenerColorCategoria(nombre)` resolves a category's hex color from the last-fetched `datosActuales`.
+
+All DOM event wiring happens in `bindEventos()`, called once on `DOMContentLoaded` before session resolution. The extracto table supports live filtering via a text search input and a category dropdown — both filter `extractoTodos` client-side and call `renderizarExtractoFiltrado()`, which also handles the 30-row pagination.
 
 ## Key Patterns
 

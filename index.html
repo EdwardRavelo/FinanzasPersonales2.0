@@ -26,6 +26,9 @@
   <!-- xlsx.js para parsear archivos del banco -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
+  <!-- PDF.js para parsear resúmenes en PDF -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
+
   <!-- Estilos -->
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -104,7 +107,7 @@
             <option value="">Cargando meses...</option>
           </select>
 
-          <input type="file" id="input-archivo" accept=".xls,.xlsx,.csv" style="display:none;">
+          <input type="file" id="input-archivo" accept=".xls,.xlsx,.csv,.pdf" style="display:none;">
           <button id="btn-subir" class="btn-accion">↑ Subir Resumen</button>
           <button id="btn-clasificar" class="btn-accion btn-secundario">Clasificar</button>
         </div>
@@ -117,17 +120,8 @@
         <div class="banner-icono" aria-hidden="true">◈</div>
         <div class="banner-texto">
           <strong>Primera vez aquí</strong>
-          <span>Importá tu historial desde Google Sheets en un click — sin perder nada.</span>
-          <span id="migracion-estado" class="migracion-estado"></span>
-          <div id="migracion-progreso-wrap" class="migracion-progreso-wrap" style="display:none;">
-            <div class="migracion-barra-fondo">
-              <div id="migracion-barra" class="migracion-barra" style="width:0%"></div>
-            </div>
-          </div>
+          <span>Para comenzar, subí tu primer resumen bancario usando el botón <strong>↑ Subir Resumen</strong> en la parte superior.</span>
         </div>
-        <button id="btn-migrar" class="btn-accion">
-          Migrar desde Google Sheets
-        </button>
       </div>
 
       <!-- ----------------------------------------------------------

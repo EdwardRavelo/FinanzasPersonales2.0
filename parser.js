@@ -289,10 +289,181 @@ const Parser = (() => {
     }
 
     // ----------------------------------------------------------------
-    // FUNCIÓN PRINCIPAL: parsear un File objeto (.xlsx / .xls)
+    // PARSEO DE PDF — Resumen BBVA Visa (formato FECHA | DESC | CUPÓN | PESOS | USD)
+    // ----------------------------------------------------------------
+
+    // Abreviaturas de meses en español tal como aparecen en el PDF del banco
+    const MESES_PDF = {
+        Ene:1, Feb:2, Mar:3, Abr:4, May:5, Jun:6,
+        Jul:7, Ago:8, Set:9, Sep:9, Oct:10, Nov:11, Dic:12,
+    };
+
+    // 'X.XXX,XX' o '-X.XXX,XX' (formato ARS sin prefijo) → número
+    function parsearMontoPDF(str) {
+        if (!str) return null;
+        const limpio = String(str).trim().replace(/\./g, '').replace(',', '.');
+        const val = parseFloat(limpio);
+        return isNaN(val) ? null : val;
+    }
+
+    // Parsea el resto de la línea luego de la fecha:
+    //   normal    → "WENDYS ABASTO 386894 2.699,00"
+    //   cuota     → "ONCITY.COM C.12/18 001594 29.166,61"
+    //   USD       → "CLAUDE.AI SUBSCRIPTION USD 20,00 706557 20,00"
+    //   cargo     → "879,98"  (sin cupón, solo monto)
+    function parsearRestoFilaPDF(resto, fecha, nombreArchivo) {
+        // Cargo bancario: solo un monto sin cupón
+        if (/^-?[\d.]+,\d{2}$/.test(resto)) {
+            const monto = parsearMontoPDF(resto);
+            if (monto === null) return null;
+            return {
+                fecha,
+                mes_periodo:    mesPeriodo(fecha),
+                comercio_crudo: 'CARGO BANCARIO',
+                comercio:       null,
+                categoria:      'Cargos Bancarios',
+                cuota_actual:   null,
+                cuota_total:    null,
+                monto_ars:      Math.abs(monto),
+                monto_usd:      null,
+                es_reintegro:   monto < 0,
+                archivo_origen: nombreArchivo,
+            };
+        }
+
+        // Transacción normal: buscar número de cupón (exactamente 6 dígitos)
+        const voucherMatch = resto.match(/\b(\d{6})\b/);
+        if (!voucherMatch) return null;
+
+        const voucherIdx  = voucherMatch.index;
+        const desc        = resto.substring(0, voucherIdx).trim();
+        const despues     = resto.substring(voucherIdx + 6).trim();
+
+        if (!desc || debeIgnorar(desc)) return null;
+
+        // Detectar transacción en USD por la marca "USD" en la descripción
+        const esUSD = /\bUSD\b/i.test(desc);
+
+        // Extraer cuota embebida en la descripción: C.XX/YY
+        const cuotaM     = desc.match(/\bC\.(\d+)\/(\d+)\b/);
+        const cuotaActual = cuotaM ? parseInt(cuotaM[1], 10) : null;
+        const cuotaTotal  = cuotaM ? parseInt(cuotaM[2], 10) : null;
+
+        // Limpiar descripción: quitar cuota y etiqueta USD
+        const nombre = desc
+            .replace(/\bC\.\d+\/\d+\b/, '')
+            .replace(/\bUSD\s+[\d.,]+/, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (!nombre || debeIgnorar(nombre)) return null;
+
+        // Montos después del cupón (puede haber 1 o 2: ARS y/o USD)
+        const montos = (despues.match(/-?[\d.]+,\d{2}/g) || []).map(parsearMontoPDF);
+
+        let ars = null, usd = null, esReintegro = false;
+
+        if (esUSD) {
+            // El último valor es el monto USD; pesos está vacío
+            usd          = montos.length > 0 ? Math.abs(montos[montos.length - 1]) : null;
+            esReintegro  = montos.length > 0 && montos[montos.length - 1] < 0;
+        } else {
+            ars          = montos.length > 0 ? Math.abs(montos[0]) : null;
+            usd          = montos.length > 1 ? Math.abs(montos[1]) : null;
+            esReintegro  = montos.length > 0 && montos[0] < 0;
+        }
+
+        if (ars === null && usd === null) return null;
+
+        // Créditos bancarios conocidos (CR. RG, etc.) → es_reintegro
+        if (esCreditoBancario(nombre)) esReintegro = true;
+
+        return {
+            fecha,
+            mes_periodo:    mesPeriodo(fecha),
+            comercio_crudo: nombre,
+            comercio:       null,
+            categoria:      esCargoBancario(nombre) ? 'Cargos Bancarios' : null,
+            cuota_actual:   cuotaActual,
+            cuota_total:    cuotaTotal,
+            monto_ars:      ars,
+            monto_usd:      usd,
+            es_reintegro:   esReintegro,
+            archivo_origen: nombreArchivo,
+        };
+    }
+
+    // Parsear el PDF completo usando PDF.js (debe estar cargado en la página)
+    async function parsearPDF(file) {
+        if (typeof pdfjsLib === 'undefined') {
+            throw new Error('PDF.js no está disponible. Recargá la página e intentá de nuevo.');
+        }
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';
+
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf         = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        const resultados = [];
+        const FECHA_RE   = /^(\d{2})-([A-Za-z]{3})-(\d{2,4}) (.*)/;
+
+        // La página 1 es la portada-resumen; los movimientos arrancan en la 2
+        for (let n = 2; n <= pdf.numPages; n++) {
+            const page = await pdf.getPage(n);
+            const tc   = await page.getTextContent();
+
+            // Agrupar items de texto por coordenada Y (tolerancia ±2 unidades)
+            const rowMap = new Map();
+            for (const item of tc.items) {
+                if (!item.str?.trim()) continue;
+                const y   = Math.round(item.transform[5]);
+                let   key = y;
+                for (const k of rowMap.keys()) {
+                    if (Math.abs(k - y) <= 2) { key = k; break; }
+                }
+                if (!rowMap.has(key)) rowMap.set(key, []);
+                rowMap.get(key).push({ str: item.str, x: item.transform[4] });
+            }
+
+            // Ordenar filas de arriba hacia abajo (Y mayor = más arriba en PDF)
+            const filas = [...rowMap.entries()]
+                .sort(([ya], [yb]) => yb - ya)
+                .map(([, items]) => items.sort((a, b) => a.x - b.x));
+
+            for (const items of filas) {
+                const texto = items.map(i => i.str).join(' ').replace(/\s+/g, ' ').trim();
+                const m     = texto.match(FECHA_RE);
+                if (!m) continue;
+
+                const [, dia, mesStr, anioStr, resto] = m;
+                const mesKey = mesStr.charAt(0).toUpperCase() + mesStr.slice(1).toLowerCase();
+                const mesNum = MESES_PDF[mesKey];
+                if (!mesNum) continue;
+
+                const anio  = anioStr.length === 2
+                    ? (parseInt(anioStr, 10) <= 50 ? `20${anioStr}` : `19${anioStr}`)
+                    : anioStr;
+                const fecha = `${anio}-${String(mesNum).padStart(2, '0')}-${dia}`;
+
+                const mov = parsearRestoFilaPDF(resto.trim(), fecha, file.name);
+                if (mov) resultados.push(mov);
+            }
+        }
+
+        normalizarMesPeriodo(resultados);
+        return resultados;
+    }
+
+    // ----------------------------------------------------------------
+    // FUNCIÓN PRINCIPAL: parsear un File objeto (.xlsx / .xls / .pdf)
     // Retorna Promise<Array<Movimiento>>
     // ----------------------------------------------------------------
     async function parsearArchivo(file) {
+        if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+            return parsearPDF(file);
+        }
+
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
 
