@@ -94,7 +94,7 @@ html, body {
 .app-container {
   font-family: var(--font-body);
   color: var(--text-main);
-  padding: 20px 24px 32px;
+  padding: 16px 22px 24px;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -109,7 +109,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   margin-top: 0;
   flex-shrink: 0;
 }
@@ -228,7 +228,7 @@ select option { background-color: var(--bg-surface); }
   justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
-  margin: 0 auto 16px;
+  margin: 0 auto 12px;
   max-width: 960px;
   width: 95%;
   flex-shrink: 0;
@@ -239,7 +239,7 @@ select option { background-color: var(--bg-surface); }
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--card-border);
-  padding: 16px 24px;
+  padding: 12px 22px;
   border-radius: var(--radius-lg);
   flex: 1;
   min-width: 220px;
@@ -319,7 +319,7 @@ select option { background-color: var(--bg-surface); }
 .bento-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: minmax(260px, 1fr) minmax(240px, 1fr);
+  grid-template-rows: minmax(220px, 1fr) minmax(200px, 1fr);
   gap: 16px;
   max-width: 1440px;
   width: 95%;
