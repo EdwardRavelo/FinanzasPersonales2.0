@@ -25,7 +25,7 @@ Push to `main` → Vercel auto-deploys. The build command is `node build.js`, wh
 
 **Script load order** (defined in `index.html`):
 1. `config.js` — Supabase credentials (auto-generated at deploy time)
-2. `parser.js` — Client-side XLSX/CSV parsing (IIFE, exposes `Parser`)
+2. `parser.js` — Client-side XLSX/CSV/PDF parsing (IIFE, exposes `Parser`)
 3. `db.js` — Supabase client + all query functions (IIFE, exposes `DB`)
 4. `app.js` — UI orchestration, DOM manipulation, Chart.js rendering
 
@@ -58,11 +58,16 @@ Three Supabase tables with RLS (`auth.uid() = user_id` on all):
 
 ### Parser (`parser.js`)
 
-Handles two bank statement formats detected by column count:
-- **New format (4 cols):** Fecha y hora, Movimientos, Cuota, Monto
-- **Old format (6 cols):** Nro. Tarjeta, Fecha, Establecimiento, Cuota, Importe $, Importe USD
+Public entry point: `Parser.parsearArchivo(file)` — dispatches to XLSX or PDF based on file extension/type.
 
-Also parses Google Sheets CSV export for historical migration. Amounts use Argentine locale (`$9.400,00`, `USD 20,00`).
+Handles three bank statement formats:
+- **New XLSX format (4 cols):** Fecha y hora, Movimientos, Cuota, Monto
+- **Old XLSX format (6 cols):** Nro. Tarjeta, Fecha, Establecimiento, Cuota, Importe $, Importe USD — detected by presence of `"Nro. Tarjeta"` in the first 5 rows
+- **PDF format (BBVA Visa):** Each transaction line starts with `DD-Mon-YY`, followed by description, a 6-digit voucher number, and amount(s). Page 1 is the cover/summary; transactions start on page 2. Parsed using PDF.js (must be loaded in the page). Installments are embedded in the description as `C.XX/YY`. USD transactions are marked with `"USD"` in the description.
+
+Also parses Google Sheets CSV export for historical migration (`parsearCSVSheets`). Amounts use Argentine locale (`$9.400,00`, `USD 20,00`).
+
+`normalizarMesPeriodo(filas)` is called after every parse: it sets `mes_periodo` on all rows to the most frequent month found — ensuring installments (whose `fecha` is the original purchase date) are assigned to the correct billing month, not the month of purchase.
 
 Three filter lists applied during parsing:
 - `PATRONES_CARGOS_BANCARIOS` — rows matching these patterns are imported as category `"Cargos Bancarios"` (e.g., `IMP DE SELLOS`, `DB IVA`, `PERCEPCIÓN AFIP`)
@@ -87,7 +92,7 @@ All DOM event wiring happens in `bindEventos()`, called once on `DOMContentLoade
 
 - **Import replaces the full month** — `importarMovimientos()` deletes all existing rows for the affected `mes_periodo` before re-inserting. The XLSX is the source of truth for that month; historical months are untouched.
 - **Import confirmation flow** — after parsing, `movimientosPendientes` holds the result until the user confirms; only then is `DB.importarMovimientos()` called.
-- **Client-side file parsing** — XLSX files never leave the browser; parsed in-memory and bulk-inserted to Supabase.
+- **Client-side file parsing** — XLSX and PDF files never leave the browser; parsed in-memory and bulk-inserted to Supabase.
 - **Auth** — Google OAuth is the primary login; Magic Link (email OTP) is the secondary option. Both use PKCE flow to prevent email-scanner token consumption.
 - **Classification rules** — saving a merchant rule retroactively updates all `movimientos` matching that `comercio_crudo` key.
 
@@ -97,6 +102,7 @@ All loaded via `<script>` tags in `index.html` — no local install:
 - `@supabase/supabase-js@2`
 - `chart.js@4.4.3` + `chartjs-plugin-datalabels@2.2.0`
 - `xlsx@0.18.5`
+- `pdfjs-dist@3.11.174` (legacy build; worker loaded from same CDN via `pdfjsLib.GlobalWorkerOptions.workerSrc`)
 - Google Fonts: Playfair Display, DM Mono, DM Sans
 
 Adding a new CDN source requires updating the `Content-Security-Policy` header in `vercel.json` — otherwise the browser will block it in production.

@@ -784,6 +784,31 @@ function bindEventos() {
         extractoPagina = 1;
         renderizarExtractoFiltrado();
     });
+
+    // Modal extracto — abrir / cerrar
+    document.getElementById('btn-ver-extracto')?.addEventListener('click', abrirExtracto);
+    document.getElementById('btn-cerrar-extracto')?.addEventListener('click', cerrarExtracto);
+    document.getElementById('modal-extracto')?.addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) cerrarExtracto();
+    });
+
+    // ESC cierra modales
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (document.getElementById('modal-extracto')?.style.display === 'flex') {
+            cerrarExtracto();
+        } else if (document.getElementById('modal-clasificar')?.style.display === 'flex') {
+            cerrarModal();
+        }
+    });
+}
+
+function abrirExtracto() {
+    document.getElementById('modal-extracto').style.display = 'flex';
+}
+
+function cerrarExtracto() {
+    document.getElementById('modal-extracto').style.display = 'none';
 }
 
 // ----------------------------------------------------------------

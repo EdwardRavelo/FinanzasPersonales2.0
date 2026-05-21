@@ -62,6 +62,7 @@
 html, body {
   background-color: var(--bg-base) !important;
   height: 100%;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -94,8 +95,11 @@ html, body {
 .app-container {
   font-family: var(--font-body);
   color: var(--text-main);
-  padding: 32px 24px;
-  min-height: 100%;
+  padding: 14px 20px;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   position: relative;
 }
 
@@ -103,38 +107,35 @@ html, body {
    CABECERA
    ---------------------------------------------------------------- */
 .cabecera {
-  text-align: center;
-  margin-bottom: 48px;
-  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  margin-top: 0;
+  flex-shrink: 0;
 }
 
 .cabecera h1 {
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-size: clamp(1rem, 1.8vw, 1.3rem);
   letter-spacing: -0.02em;
   line-height: 1.1;
   color: var(--text-main);
-  /* Solo las palabras clave en oro */
   background: linear-gradient(135deg, var(--text-main) 0%, var(--gold) 60%, var(--text-main) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  margin-bottom: 6px;
+  margin-bottom: 0;
 }
 
 .cabecera-subtitulo {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 28px;
+  display: none;
 }
 
 .controles-header {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
@@ -228,9 +229,10 @@ select option { background-color: var(--bg-surface); }
   justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
-  margin: 0 auto 32px;
+  margin: 0 auto 10px;
   max-width: 960px;
   width: 95%;
+  flex-shrink: 0;
 }
 
 .tarjeta {
@@ -238,7 +240,7 @@ select option { background-color: var(--bg-surface); }
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--card-border);
-  padding: 28px 32px;
+  padding: 10px 20px;
   border-radius: var(--radius-lg);
   flex: 1;
   min-width: 220px;
@@ -247,6 +249,9 @@ select option { background-color: var(--bg-surface); }
   transition: transform 0.35s var(--ease), border-color 0.35s var(--ease), box-shadow 0.35s var(--ease);
   position: relative;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 /* Línea decorativa superior */
@@ -271,14 +276,7 @@ select option { background-color: var(--bg-surface); }
 
 /* Ícono de marca de agua en el fondo */
 .tarjeta-icon {
-  position: absolute;
-  bottom: 12px;
-  right: 20px;
-  font-size: 48px;
-  opacity: 0.04;
-  line-height: 1;
-  user-select: none;
-  pointer-events: none;
+  display: none;
 }
 
 .titulo-kpi {
@@ -288,16 +286,17 @@ select option { background-color: var(--bg-surface); }
   font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.18em;
-  margin-bottom: 12px;
+  margin-bottom: 0;
+  white-space: nowrap;
 }
 
 .valor-kpi {
   font-family: var(--font-display);
-  font-size: clamp(26px, 3vw, 38px);
+  font-size: clamp(18px, 2vw, 28px);
   font-weight: 700;
   color: var(--text-main);
-  line-height: 1;
-  margin-bottom: 8px;
+  line-height: 1.1;
+  margin-bottom: 0;
 }
 
 .kpi-total .valor-kpi {
@@ -321,10 +320,13 @@ select option { background-color: var(--bg-surface); }
 .bento-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 1fr 1fr;
   gap: 16px;
   max-width: 1440px;
   width: 95%;
-  margin: 0 auto 48px;
+  margin: 0 auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .bento-caja {
@@ -337,6 +339,8 @@ select option { background-color: var(--bg-surface); }
   display: flex;
   flex-direction: column;
   transition: border-color 0.3s var(--ease);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .bento-caja:hover { border-color: rgba(255,255,255,0.1); }
@@ -365,19 +369,18 @@ select option { background-color: var(--bg-surface); }
 }
 
 /* Posiciones del grid */
-.area-evo      { grid-column: span 2; }
-.area-torta    { grid-column: span 1; }
-.area-top      { grid-column: span 1; }
-.area-cuotas   { grid-column: span 2; }
-.area-extracto { grid-column: span 3; }
+.area-evo    { grid-column: span 2; }
+.area-torta  { grid-column: span 1; }
+.area-top    { grid-column: span 1; }
+.area-cuotas { grid-column: span 2; }
 
 /* ----------------------------------------------------------------
    CONTENEDORES DE GRÁFICAS
    ---------------------------------------------------------------- */
 .chart-container {
   position: relative;
-  flex-grow: 1;
-  min-height: 200px;
+  flex: 1;
+  min-height: 0;
   width: 100%;
 }
 
@@ -385,6 +388,13 @@ select option { background-color: var(--bg-surface); }
    TABLAS ELEGANTES
    ---------------------------------------------------------------- */
 .tabla-wrapper { overflow-x: auto; }
+
+/* En el panel de cuotas, la tabla ocupa el espacio disponible */
+.area-cuotas .tabla-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
 
 .tabla-elegante {
   width: 100%;
@@ -623,6 +633,31 @@ select option { background-color: var(--bg-surface); }
   background: rgba(255,255,255,0.05);
 }
 
+/* ----------------------------------------------------------------
+   MODAL EXTRACTO — full-screen con tabla scrollable interna
+   ---------------------------------------------------------------- */
+.modal-extracto-caja {
+  width: 95%;
+  max-width: 1200px;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 36px;
+}
+
+.modal-extracto-caja .modal-header {
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.extracto-tabla-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
 /* Inputs y selects dentro del modal */
 .input-sugerencia,
 .select-categoria {
@@ -651,10 +686,7 @@ select option { background-color: var(--bg-surface); }
    FOOTER
    ---------------------------------------------------------------- */
 .footer-app {
-  text-align: center;
-  padding: 32px 20px;
-  margin-top: 24px;
-  border-top: 1px solid rgba(255,255,255,0.05);
+  display: none;
 }
 
 .footer-app p {
@@ -674,11 +706,10 @@ select option { background-color: var(--bg-surface); }
 /* Tablet */
 @media (max-width: 900px) {
   .bento-grid { grid-template-columns: repeat(2, 1fr); }
-  .area-evo      { grid-column: span 2; }
-  .area-torta    { grid-column: span 1; }
-  .area-top      { grid-column: span 1; }
-  .area-cuotas   { grid-column: span 2; }
-  .area-extracto { grid-column: span 2; }
+  .area-evo    { grid-column: span 2; }
+  .area-torta  { grid-column: span 1; }
+  .area-top    { grid-column: span 1; }
+  .area-cuotas { grid-column: span 2; }
 }
 
 /* Mobile */
@@ -717,18 +748,21 @@ select option { background-color: var(--bg-surface); }
     min-height: 44px;
   }
 
-  /* Bento grid */
+  /* Bento grid — en mobile se permite scroll */
+  html, body { overflow: auto; }
+  .app-container { height: auto; overflow: visible; }
   .bento-grid {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
     gap: 12px;
+    flex: none;
   }
   .area-evo,
   .area-torta,
   .area-top,
-  .area-cuotas,
-  .area-extracto { grid-column: span 1; }
+  .area-cuotas { grid-column: span 1; }
 
-  .bento-caja { padding: 18px 16px; }
+  .bento-caja { padding: 18px 16px; overflow: visible; min-height: auto; }
 
   .chart-container { min-height: 220px; }
 
@@ -776,18 +810,17 @@ select option { background-color: var(--bg-surface); }
 
 /* Teléfonos pequeños */
 @media (max-width: 480px) {
-  /* Extracto: mostrar solo Comercio y Monto ARS */
-  .area-extracto .tabla-elegante th:nth-child(1),
-  .area-extracto .tabla-elegante td:nth-child(1),
-  .area-extracto .tabla-elegante th:nth-child(3),
-  .area-extracto .tabla-elegante td:nth-child(3),
-  .area-extracto .tabla-elegante th:nth-child(5),
-  .area-extracto .tabla-elegante td:nth-child(5) {
+  /* Extracto modal: mostrar solo Comercio y Monto ARS */
+  .modal-extracto-caja .tabla-elegante th:nth-child(1),
+  .modal-extracto-caja .tabla-elegante td:nth-child(1),
+  .modal-extracto-caja .tabla-elegante th:nth-child(3),
+  .modal-extracto-caja .tabla-elegante td:nth-child(3),
+  .modal-extracto-caja .tabla-elegante th:nth-child(5),
+  .modal-extracto-caja .tabla-elegante td:nth-child(5) {
     display: none;
   }
 
-  /* Comercio con más espacio al eliminar otras columnas */
-  .area-extracto .tabla-elegante td:nth-child(2) {
+  .modal-extracto-caja .tabla-elegante td:nth-child(2) {
     max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -977,9 +1010,9 @@ select option { background-color: var(--bg-surface); }
    ================================================================ */
 .cabecera-top {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 0;
 }
 
 .btn-logout {
@@ -994,8 +1027,15 @@ select option { background-color: var(--bg-surface); }
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s var(--ease);
-  margin-top: 8px;
+  margin-top: 0;
   flex-shrink: 0;
+}
+
+.btn-ver-extracto {
+  font-size: 11px;
+  margin-top: auto;
+  padding-top: 10px;
+  align-self: flex-end;
 }
 
 .btn-logout:hover {
@@ -1012,7 +1052,8 @@ select option { background-color: var(--bg-surface); }
   gap: 20px;
   max-width: 1440px;
   width: 95%;
-  margin: 0 auto 28px;
+  margin: 0 auto 10px;
+  flex-shrink: 0;
   padding: 20px 28px;
   background: rgba(201,169,110,0.06);
   border: 1px solid rgba(201,169,110,0.25);

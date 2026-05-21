@@ -94,12 +94,7 @@
       ---------------------------------------------------------- -->
       <header class="cabecera">
         <div class="cabecera-top">
-          <div>
-            <h1>Dashboard de Finanzas</h1>
-          </div>
-          <button id="btn-logout" class="btn-logout" title="Cerrar sesión">
-            Salir
-          </button>
+          <h1>Dashboard de Finanzas</h1>
         </div>
 
         <div class="controles-header">
@@ -110,6 +105,7 @@
           <input type="file" id="input-archivo" accept=".xls,.xlsx,.csv,.pdf" style="display:none;">
           <button id="btn-subir" class="btn-accion">↑ Subir Resumen</button>
           <button id="btn-clasificar" class="btn-accion btn-secundario">Clasificar</button>
+          <button id="btn-logout" class="btn-logout" title="Cerrar sesión">Salir</button>
         </div>
       </header>
 
@@ -200,55 +196,59 @@
               <tfoot id="pie-cuotas"></tfoot>
             </table>
           </div>
-        </div>
-
-        <!-- Extracto del mes -->
-        <div class="bento-caja area-extracto">
-          <div class="extracto-header">
-            <div class="bento-titulo">Extracto del Mes</div>
-            <div class="extracto-controles">
-              <input
-                type="search"
-                id="extracto-buscar"
-                class="extracto-input-buscar"
-                placeholder="Buscar comercio..."
-                autocomplete="off"
-              >
-              <select id="extracto-filtro-cat" class="extracto-select-cat">
-                <option value="">Todas las categorías</option>
-              </select>
-              <span id="extracto-contador" class="extracto-contador"></span>
-            </div>
+          <div style="padding-top:10px; text-align:right;">
+            <button id="btn-ver-extracto" class="btn-accion btn-secundario btn-ver-extracto">
+              Ver extracto completo →
+            </button>
           </div>
-          <div class="tabla-wrapper">
-            <table class="tabla-elegante">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Comercio</th>
-                  <th>Categoría</th>
-                  <th style="text-align:right;">Monto ARS</th>
-                  <th style="text-align:right;">Monto USD</th>
-                </tr>
-              </thead>
-              <tbody id="cuerpo-extracto"></tbody>
-            </table>
-          </div>
-          <div id="extracto-paginacion" class="extracto-paginacion"></div>
         </div>
 
       </div><!-- /.bento-grid -->
 
-      <!-- ----------------------------------------------------------
-           FOOTER
-      ---------------------------------------------------------- -->
-      <footer class="footer-app">
-        <p>Desarrollado por <span>Edward Morales Ravelo</span> &nbsp;·&nbsp; 2026</p>
-      </footer>
-
     </div><!-- /.app-container -->
 
   </div><!-- /#pantalla-app -->
+
+  <!-- ============================================================
+       MODAL: EXTRACTO DEL MES
+  ============================================================ -->
+  <div class="modal-overlay" id="modal-extracto"
+       role="dialog" aria-modal="true" aria-labelledby="extracto-titulo" style="display:none;">
+    <div class="modal-caja modal-extracto-caja">
+      <div class="modal-header">
+        <h2 id="extracto-titulo">Extracto del Mes</h2>
+        <div class="extracto-controles">
+          <input
+            type="search"
+            id="extracto-buscar"
+            class="extracto-input-buscar"
+            placeholder="Buscar comercio..."
+            autocomplete="off"
+          >
+          <select id="extracto-filtro-cat" class="extracto-select-cat">
+            <option value="">Todas las categorías</option>
+          </select>
+          <span id="extracto-contador" class="extracto-contador"></span>
+        </div>
+        <button class="modal-close" id="btn-cerrar-extracto" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="extracto-tabla-wrapper">
+        <table class="tabla-elegante">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Comercio</th>
+              <th>Categoría</th>
+              <th style="text-align:right;">Monto ARS</th>
+              <th style="text-align:right;">Monto USD</th>
+            </tr>
+          </thead>
+          <tbody id="cuerpo-extracto"></tbody>
+        </table>
+      </div>
+      <div id="extracto-paginacion" class="extracto-paginacion"></div>
+    </div>
+  </div>
 
   <!-- ============================================================
        MODAL: CLASIFICAR COMERCIOS
