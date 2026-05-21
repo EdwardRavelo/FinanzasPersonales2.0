@@ -62,7 +62,6 @@
 html, body {
   background-color: var(--bg-base) !important;
   height: 100%;
-  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -95,11 +94,11 @@ html, body {
 .app-container {
   font-family: var(--font-body);
   color: var(--text-main);
-  padding: 14px 20px;
-  height: 100dvh;
+  padding: 20px 24px 32px;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
   position: relative;
 }
 
@@ -110,7 +109,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
   margin-top: 0;
   flex-shrink: 0;
 }
@@ -229,7 +228,7 @@ select option { background-color: var(--bg-surface); }
   justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
-  margin: 0 auto 10px;
+  margin: 0 auto 16px;
   max-width: 960px;
   width: 95%;
   flex-shrink: 0;
@@ -240,7 +239,7 @@ select option { background-color: var(--bg-surface); }
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--card-border);
-  padding: 10px 20px;
+  padding: 16px 24px;
   border-radius: var(--radius-lg);
   flex: 1;
   min-width: 220px;
@@ -320,7 +319,7 @@ select option { background-color: var(--bg-surface); }
 .bento-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: 1fr 1fr;
+  grid-template-rows: minmax(260px, 1fr) minmax(240px, 1fr);
   gap: 16px;
   max-width: 1440px;
   width: 95%;
@@ -748,9 +747,8 @@ select option { background-color: var(--bg-surface); }
     min-height: 44px;
   }
 
-  /* Bento grid — en mobile se permite scroll */
-  html, body { overflow: auto; }
-  .app-container { height: auto; overflow: visible; }
+  /* Bento grid */
+  .app-container { min-height: 100dvh; }
   .bento-grid {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
