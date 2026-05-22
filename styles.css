@@ -319,13 +319,11 @@ select option { background-color: var(--bg-surface); }
 .bento-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: minmax(220px, 1fr) minmax(200px, 1fr);
-  gap: 16px;
+  grid-template-rows: 210px 185px;
+  gap: 14px;
   max-width: 1440px;
   width: 95%;
   margin: 0 auto;
-  flex: 1;
-  min-height: 0;
 }
 
 .bento-caja {
@@ -333,7 +331,7 @@ select option { background-color: var(--bg-surface); }
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--card-border);
-  padding: 24px;
+  padding: 16px 20px;
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
@@ -351,7 +349,7 @@ select option { background-color: var(--bg-surface); }
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.2em;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -372,6 +370,11 @@ select option { background-color: var(--bg-surface); }
 .area-torta  { grid-column: span 1; }
 .area-top    { grid-column: span 1; }
 .area-cuotas { grid-column: span 2; }
+
+/* En paneles pequeños el canvas llena todo el espacio disponible */
+.area-torta .chart-container,
+.area-top .chart-container,
+.area-evo .chart-container { overflow: hidden; }
 
 /* ----------------------------------------------------------------
    CONTENEDORES DE GRÁFICAS
