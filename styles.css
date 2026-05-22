@@ -52,6 +52,121 @@
 
   /* Transiciones */
   --ease:           cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Tema: variables para elementos que no usan CSS vars nativamente */
+  --input-bg:       rgba(255, 255, 255, 0.04);
+  --subtle-border:  rgba(255, 255, 255, 0.06);
+  --row-border:     rgba(255, 255, 255, 0.025);
+  --hover-row:      rgba(255, 255, 255, 0.025);
+  --skeleton-a:     rgba(255, 255, 255, 0.04);
+  --skeleton-b:     rgba(255, 255, 255, 0.08);
+  --tooltip-bg:     rgba(8, 12, 18, 0.95);
+}
+
+/* ================================================================
+   TEMA CLARO — grises refinados, no blanco puro
+   ================================================================ */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-base:        #e8eaee;
+  --bg-surface:     #d8dbe2;
+
+  --card-bg:        rgba(255, 255, 255, 0.65);
+  --card-border:    rgba(0, 0, 0, 0.08);
+  --card-border-hover: rgba(0, 0, 0, 0.20);
+
+  --text-main:      #1a2332;
+  --text-muted:     #64748b;
+  --text-dim:       #94a3b8;
+
+  --gold:           #a07028;
+  --gold-dim:       rgba(160, 112, 40, 0.12);
+  --gold-glow:      rgba(160, 112, 40, 0.28);
+
+  --cyan:           #1e8f8f;
+  --cyan-dim:       rgba(30, 143, 143, 0.10);
+
+  --green:          #1a7a44;
+  --green-dim:      rgba(26, 122, 68, 0.10);
+  --red:            #b83232;
+
+  --input-bg:       rgba(0, 0, 0, 0.05);
+  --subtle-border:  rgba(0, 0, 0, 0.07);
+  --row-border:     rgba(0, 0, 0, 0.05);
+  --hover-row:      rgba(0, 0, 0, 0.03);
+  --skeleton-a:     rgba(0, 0, 0, 0.05);
+  --skeleton-b:     rgba(0, 0, 0, 0.10);
+  --tooltip-bg:     rgba(26, 35, 50, 0.95);
+}
+
+/* ================================================================
+   LIGHT MODE — overrides para elementos con colores hardcodeados
+   ================================================================ */
+[data-theme="light"] .fondo-luces {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse 60% 50% at 10% 60%, rgba(160, 112, 40, 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 90% 20%, rgba(30, 143, 143, 0.05) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 60% at 50% 100%, rgba(26, 122, 68, 0.04) 0%, transparent 50%);
+}
+
+[data-theme="light"] .modal-caja {
+  box-shadow: 0 16px 48px rgba(0,0,0,0.14), 0 0 0 1px rgba(160,112,40,0.1);
+  border-color: rgba(0,0,0,0.1);
+}
+
+[data-theme="light"] .pag-btn {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.08);
+}
+
+[data-theme="light"] .cuota-badge {
+  background: rgba(0,0,0,0.05);
+  border-color: rgba(0,0,0,0.08);
+}
+
+[data-theme="light"] .top5-item {
+  border-bottom-color: rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .bento-caja:hover {
+  border-color: rgba(0,0,0,0.15);
+}
+
+[data-theme="light"] .input-sugerencia,
+[data-theme="light"] .select-categoria {
+  background: rgba(0,0,0,0.04);
+}
+
+[data-theme="light"] .banner-migracion {
+  background: rgba(160,112,40,0.06);
+}
+
+[data-theme="light"] .tabla-elegante thead tr {
+  border-bottom-color: rgba(0,0,0,0.1);
+}
+
+/* Botón de tema */
+.btn-tema {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--subtle-border);
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.btn-tema:hover {
+  color: var(--text-main);
+  border-color: var(--card-border-hover);
 }
 
 /* ----------------------------------------------------------------
@@ -69,8 +184,8 @@ html, body {
 /* Scrollbar personalizada */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--card-border-hover); }
 
 /* ----------------------------------------------------------------
    FONDO: textura + luces ambientales
@@ -149,7 +264,7 @@ input[type="month"] {
   font-size: 13px;
   font-family: var(--font-mono);
   border-radius: var(--radius-sm);
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--input-bg);
   color: var(--text-main);
   border: 1px solid var(--card-border);
   outline: none;
@@ -420,14 +535,14 @@ select option { background-color: var(--bg-surface); }
 }
 
 .tabla-elegante tbody tr {
-  border-bottom: 1px solid rgba(255,255,255,0.025);
+  border-bottom: 1px solid var(--row-border);
   transition: background 0.2s var(--ease);
 }
 
 .tabla-elegante tbody tr:last-child { border-bottom: none; }
 
 .tabla-elegante tbody tr:hover td {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--hover-row);
 }
 
 .tabla-elegante td {
@@ -545,9 +660,9 @@ select option { background-color: var(--bg-surface); }
 .skeleton {
   background: linear-gradient(
     90deg,
-    rgba(255,255,255,0.04) 25%,
-    rgba(255,255,255,0.08) 50%,
-    rgba(255,255,255,0.04) 75%
+    var(--skeleton-a) 25%,
+    var(--skeleton-b) 50%,
+    var(--skeleton-a) 75%
   );
   background-size: 600px 100%;
   animation: shimmer 1.6s infinite linear;
@@ -990,6 +1105,52 @@ select option { background-color: var(--bg-surface); }
 }
 
 /* ================================================================
+   PANTALLAS GRANDES — más espacio para los paneles
+   ================================================================ */
+@media (min-width: 1440px) {
+  .bento-grid {
+    grid-template-rows: 240px 210px;
+  }
+  .contenedor-kpi { max-width: 1200px; }
+  .tarjeta { padding: 16px 28px; }
+  .valor-kpi { font-size: clamp(22px, 2.2vw, 32px); }
+}
+
+/* ================================================================
+   MOBILE — mejoras específicas de layout
+   ================================================================ */
+@media (max-width: 640px) {
+  /* Header: título arriba, controles abajo */
+  .cabecera {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .cabecera-top { justify-content: flex-start; }
+  .controles-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto auto;
+    gap: 8px;
+    justify-content: unset;
+  }
+  #selector-mes { grid-column: span 4; }
+  #btn-subir    { grid-column: span 2; }
+
+  /* KPI: columna en pantallas muy pequeñas */
+  .contenedor-kpi { flex-direction: column; gap: 8px; }
+  .tarjeta { padding: 12px 16px; min-width: unset; max-width: 100%; }
+  .valor-kpi { font-size: clamp(20px, 6vw, 30px); }
+
+  /* Cat top en mobile */
+  .cat-top-monto { font-size: clamp(20px, 5vw, 26px); }
+
+  /* Bento */
+  .bento-caja { min-height: 160px; }
+  .area-cuotas .tabla-wrapper { overflow-y: visible; flex: none; }
+}
+
+/* ================================================================
    PANTALLA DE LOGIN — Magic Link
    ================================================================ */
 .login-overlay {
@@ -1183,7 +1344,7 @@ select option { background-color: var(--bg-surface); }
   letter-spacing: 0.12em;
   color: var(--text-muted);
   background: none;
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid var(--subtle-border);
   padding: 8px 14px;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -1355,7 +1516,7 @@ select option { background-color: var(--bg-surface); }
   padding: 7px 14px;
   font-size: 12px;
   font-family: var(--font-mono);
-  background: rgba(255,255,255,0.04);
+  background: var(--input-bg);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-sm);
   color: var(--text-main);
@@ -1379,7 +1540,7 @@ select option { background-color: var(--bg-surface); }
   padding: 7px 14px;
   font-size: 11px;
   font-family: var(--font-mono);
-  background: rgba(255,255,255,0.04);
+  background: var(--input-bg);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-sm);
   color: var(--text-muted);

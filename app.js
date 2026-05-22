@@ -21,10 +21,13 @@ const EXTRACTO_POR_PAGINA = 30;
 let movimientosPendientes = null;
 let mesesConDataActual    = [];
 
+// Último payload del dashboard (para redibujar al cambiar de tema)
+let datosActuales = null;
+
 // ----------------------------------------------------------------
 // PALETA Y CONFIG GLOBAL DE CHART.JS
 // ----------------------------------------------------------------
-const PALETTE = {
+let PALETTE = {
     gold:      '#c9a96e',
     goldDim:   'rgba(201,169,110,0.15)',
     cyan:      '#4fc3c3',
@@ -40,18 +43,66 @@ const PALETTE = {
     ],
 };
 
-Chart.defaults.color                         = PALETTE.textMuted;
+const PALETTES = {
+    dark: {
+        gold: '#c9a96e', goldDim: 'rgba(201,169,110,0.15)',
+        cyan: '#4fc3c3', green: '#5ecf8c',
+        textMuted: '#5e7080', textMain: '#eef2f7',
+        border: 'rgba(255,255,255,0.06)',
+        tooltipBg: 'rgba(8,12,18,0.95)',
+        tooltipBorder: 'rgba(201,169,110,0.3)',
+    },
+    light: {
+        gold: '#a07028', goldDim: 'rgba(160,112,40,0.12)',
+        cyan: '#1e8f8f', green: '#1a7a44',
+        textMuted: '#64748b', textMain: '#1a2332',
+        border: 'rgba(0,0,0,0.07)',
+        tooltipBg: 'rgba(26,35,50,0.95)',
+        tooltipBorder: 'rgba(160,112,40,0.3)',
+    },
+};
+
+function aplicarTema(tema) {
+    const p = PALETTES[tema] || PALETTES.dark;
+    PALETTE.gold      = p.gold;
+    PALETTE.goldDim   = p.goldDim;
+    PALETTE.cyan      = p.cyan;
+    PALETTE.green     = p.green;
+    PALETTE.textMuted = p.textMuted;
+    PALETTE.textMain  = p.textMain;
+    PALETTE.border    = p.border;
+
+    Chart.defaults.color                           = p.textMuted;
+    Chart.defaults.plugins.tooltip.backgroundColor = p.tooltipBg;
+    Chart.defaults.plugins.tooltip.borderColor     = p.tooltipBorder;
+    Chart.defaults.plugins.tooltip.titleColor      = p.gold;
+    Chart.defaults.plugins.tooltip.bodyColor       = p.textMain;
+
+    const btn = document.getElementById('btn-tema');
+    if (btn) btn.textContent = tema === 'light' ? '☾' : '☀';
+}
+
+function toggleTema() {
+    const html  = document.documentElement;
+    const nuevo = html.dataset.theme === 'light' ? 'dark' : 'light';
+    html.dataset.theme = nuevo;
+    localStorage.setItem('tema', nuevo);
+    const bg = nuevo === 'light' ? '#e8eaee' : '#080c12';
+    document.body.style.setProperty('background-color', bg, 'important');
+    aplicarTema(nuevo);
+    if (datosActuales) dibujarDashboard(datosActuales);
+}
+
 Chart.defaults.font.family                   = "'DM Mono', monospace";
 Chart.defaults.font.size                     = 11;
-Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(8,12,18,0.95)';
-Chart.defaults.plugins.tooltip.borderColor   = 'rgba(201,169,110,0.3)';
 Chart.defaults.plugins.tooltip.borderWidth   = 1;
-Chart.defaults.plugins.tooltip.titleColor    = PALETTE.gold;
-Chart.defaults.plugins.tooltip.bodyColor     = PALETTE.textMain;
 Chart.defaults.plugins.tooltip.padding       = 12;
 Chart.defaults.plugins.tooltip.cornerRadius  = 8;
 Chart.defaults.plugins.tooltip.titleFont     = { family:"'DM Mono',monospace", size:11, weight:'500' };
 Chart.defaults.plugins.tooltip.bodyFont      = { family:"'Playfair Display',serif", size:15, weight:'700' };
+
+// Aplicar tema guardado al inicio
+aplicarTema(document.documentElement.dataset.theme || 'dark');
 
 // ----------------------------------------------------------------
 // INICIO
@@ -194,6 +245,8 @@ async function cargarMes(mes) {
 // DIBUJAR DASHBOARD
 // ----------------------------------------------------------------
 function dibujarDashboard(datos) {
+    datosActuales = datos;
+
     // Mapa nombre→color compartido por todos los gráficos para coherencia visual
     const colorMap = {};
     (datos.categorias || []).forEach(c => { colorMap[c.nombre] = c.color; });
@@ -843,6 +896,9 @@ function bindEventos() {
 
     // Botón migrar desde Sheets
     document.getElementById('btn-migrar')?.addEventListener('click', ejecutarMigracion);
+
+    // Botón de tema
+    document.getElementById('btn-tema')?.addEventListener('click', toggleTema);
 
     // Botón cerrar sesión
     document.getElementById('btn-logout')?.addEventListener('click', async () => {

@@ -35,8 +35,13 @@
 <body>
 
   <script>
-    document.documentElement.style.setProperty('background-color', '#080c12', 'important');
-    document.body.style.setProperty('background-color', '#080c12', 'important');
+    (function() {
+      const t = localStorage.getItem('tema') || 'dark';
+      document.documentElement.dataset.theme = t;
+      const bg = t === 'light' ? '#e8eaee' : '#080c12';
+      document.documentElement.style.setProperty('background-color', bg, 'important');
+      document.body && document.body.style.setProperty('background-color', bg, 'important');
+    })();
   </script>
 
   <div class="fondo-luces" aria-hidden="true"></div>
@@ -105,6 +110,7 @@
           <input type="file" id="input-archivo" accept=".xls,.xlsx,.csv,.pdf" style="display:none;">
           <button id="btn-subir" class="btn-accion">↑ Subir Resumen</button>
           <button id="btn-clasificar" class="btn-accion btn-secundario">Clasificar</button>
+          <button id="btn-tema" class="btn-tema" title="Cambiar tema">☀</button>
           <button id="btn-logout" class="btn-logout" title="Cerrar sesión">Salir</button>
         </div>
       </header>
