@@ -200,6 +200,7 @@ function dibujarDashboard(datos) {
 
     dibujarKPIs(datos.kpis);
     dibujarDonut(datos.distribucion, colorMap);
+    dibujarCatTop(datos.distribucion, colorMap);
     dibujarBarras(datos.top10);
     dibujarEvolucion(datos.evolucion, datos.categorias);
     dibujarCuotas(datos.cuotas);
@@ -292,6 +293,36 @@ function dibujarDonut(distribucion, colorMap = {}) {
 }
 
 // ----------------------------------------------------------------
+// ----------------------------------------------------------------
+// CATEGORÍA TOP DEL MES
+// ----------------------------------------------------------------
+function dibujarCatTop(distribucion, colorMap) {
+    const dotEl    = document.getElementById('cat-top-dot');
+    const nombreEl = document.getElementById('cat-top-nombre');
+    const montoEl  = document.getElementById('cat-top-monto');
+    const pctEl    = document.getElementById('cat-top-pct');
+    if (!dotEl) return;
+
+    if (!distribucion || !distribucion.length) {
+        nombreEl.textContent = '—';
+        montoEl.textContent  = '—';
+        pctEl.textContent    = '—';
+        return;
+    }
+
+    const sorted = [...distribucion].sort((a, b) => b.total - a.total);
+    const top    = sorted[0];
+    const total  = distribucion.reduce((s, d) => s + d.total, 0);
+    const pct    = total > 0 ? Math.round((top.total / total) * 100) : 0;
+    const color  = colorMap[top.categoria] || '#94a3b8';
+
+    dotEl.style.background   = color;
+    nombreEl.textContent     = top.categoria;
+    montoEl.textContent      = formatARS(top.total);
+    montoEl.style.color      = color;
+    pctEl.textContent        = `${pct}% del total del mes`;
+}
+
 // TOP 10 COMERCIOS — lista compacta en panel + gráfico en modal
 // ----------------------------------------------------------------
 let top10Data = [];

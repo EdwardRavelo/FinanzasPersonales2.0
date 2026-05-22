@@ -366,10 +366,11 @@ select option { background-color: var(--bg-surface); }
 }
 
 /* Posiciones del grid */
-.area-evo    { grid-column: span 2; }
-.area-torta  { grid-column: span 1; }
-.area-top    { grid-column: span 1; }
-.area-cuotas { grid-column: span 2; }
+.area-evo     { grid-column: span 2; }
+.area-torta   { grid-column: span 1; }
+.area-top     { grid-column: span 1; }
+.area-cat-top { grid-column: span 1; }
+.area-cuotas  { grid-column: span 1; }
 
 /* En paneles pequeños el canvas llena todo el espacio disponible */
 .area-torta .chart-container,
@@ -636,6 +637,56 @@ select option { background-color: var(--bg-surface); }
 }
 
 /* ----------------------------------------------------------------
+   CATEGORÍA TOP — panel
+   ---------------------------------------------------------------- */
+.cat-top-contenido {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.cat-top-nombre-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cat-top-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+
+.cat-top-nombre {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-top-monto {
+  font-family: var(--font-display);
+  font-size: clamp(18px, 2vw, 26px);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--gold);
+}
+
+.cat-top-pct {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+
+/* ----------------------------------------------------------------
    TOP 5 — lista compacta en panel
    ---------------------------------------------------------------- */
 .top5-lista {
@@ -815,10 +866,11 @@ select option { background-color: var(--bg-surface); }
 /* Tablet */
 @media (max-width: 900px) {
   .bento-grid { grid-template-columns: repeat(2, 1fr); }
-  .area-evo    { grid-column: span 2; }
-  .area-torta  { grid-column: span 1; }
-  .area-top    { grid-column: span 1; }
-  .area-cuotas { grid-column: span 2; }
+  .area-evo     { grid-column: span 2; }
+  .area-torta   { grid-column: span 1; }
+  .area-top     { grid-column: span 1; }
+  .area-cat-top { grid-column: span 1; }
+  .area-cuotas  { grid-column: span 1; }
 }
 
 /* Mobile */
@@ -868,6 +920,7 @@ select option { background-color: var(--bg-surface); }
   .area-evo,
   .area-torta,
   .area-top,
+  .area-cat-top,
   .area-cuotas { grid-column: span 1; }
 
   .bento-caja { padding: 18px 16px; overflow: visible; min-height: auto; }
