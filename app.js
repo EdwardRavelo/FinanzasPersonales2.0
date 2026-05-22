@@ -292,9 +292,38 @@ function dibujarDonut(distribucion, colorMap = {}) {
 }
 
 // ----------------------------------------------------------------
-// GRÁFICO BARRAS — Top 10 comercios
+// TOP 10 COMERCIOS — lista compacta en panel + gráfico en modal
 // ----------------------------------------------------------------
+let top10Data = [];
+
 function dibujarBarras(top10) {
+    top10Data = top10 || [];
+
+    const lista = document.getElementById('lista-top5');
+    if (!lista) return;
+    lista.innerHTML = '';
+
+    const items = top10Data.slice(0, 5);
+    if (!items.length) {
+        lista.innerHTML = '<li class="tabla-vacia">Sin datos</li>';
+        return;
+    }
+    items.forEach((item, i) => {
+        const li = document.createElement('li');
+        li.className = 'top5-item';
+        li.innerHTML = `
+            <span class="top5-rank">${i + 1}</span>
+            <span class="top5-nombre">${item.comercio}</span>
+            <span class="top5-monto">${formatARS(item.total)}</span>
+        `;
+        lista.appendChild(li);
+    });
+}
+
+function dibujarBarrasModal() {
+    const top10 = top10Data;
+    if (!top10.length) return;
+
     const labels = top10.map(t => t.comercio);
     const values = top10.map(t => t.total);
     const maxVal = Math.max(...values, 1);
@@ -312,7 +341,7 @@ function dibujarBarras(top10) {
                 borderWidth:     { top: 0, right: 0, bottom: 0, left: 2 },
                 borderSkipped:   false,
                 borderRadius:    { topRight: 3, bottomRight: 3, topLeft: 0, bottomLeft: 0 },
-                barThickness:    11,
+                barThickness:    14,
             }]
         },
         options: {
@@ -320,7 +349,7 @@ function dibujarBarras(top10) {
             responsive: true,
             maintainAspectRatio: false,
             animation: false,
-            layout: { padding: { right: 70 } },
+            layout: { padding: { right: 80 } },
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -332,17 +361,17 @@ function dibujarBarras(top10) {
                 datalabels: {
                     anchor: 'end', align: 'end',
                     color: PALETTE.textMuted,
-                    font: { size: 10, family: "'DM Mono',monospace" },
+                    font: { size: 11, family: "'DM Mono',monospace" },
                     formatter: val => formatARS(val),
                     offset: 4,
                 }
             },
             scales: {
-                x: { display: false, grid: { display: false }, max: maxVal * 1.35 },
+                x: { display: false, grid: { display: false }, max: maxVal * 1.4 },
                 y: {
                     grid: { display: false },
                     border: { display: false },
-                    ticks: { color: PALETTE.textMuted, font: { size: 11, family: "'DM Mono',monospace" } }
+                    ticks: { color: PALETTE.textMuted, font: { size: 12, family: "'DM Mono',monospace" } }
                 }
             }
         },
@@ -484,8 +513,24 @@ function dibujarEvolucion(evolucion, categorias = []) {
 // TABLA CUOTAS
 // ----------------------------------------------------------------
 function dibujarCuotas(cuotas) {
+    // — Panel resumen —
+    const totalEl = document.getElementById('cuotas-total-display');
+    const cantEl  = document.getElementById('cuotas-cantidad-display');
+
+    if (!cuotas.length) {
+        if (totalEl) totalEl.textContent = '—';
+        if (cantEl)  cantEl.textContent  = 'sin cuotas este mes';
+    } else {
+        const total    = cuotas.reduce((s, c) => s + c.monto, 0);
+        const comercios = new Set(cuotas.map(c => c.comercio)).size;
+        if (totalEl) totalEl.textContent = formatARS(total);
+        if (cantEl)  cantEl.textContent  = `${comercios} comercio${comercios !== 1 ? 's' : ''} con cuotas`;
+    }
+
+    // — Modal tabla —
     const tbody = document.getElementById('cuerpo-cuotas');
     const tfoot = document.getElementById('pie-cuotas');
+    if (!tbody) return;
     tbody.innerHTML = '';
     if (tfoot) tfoot.innerHTML = '';
 
@@ -792,15 +837,50 @@ function bindEventos() {
         if (e.target === e.currentTarget) cerrarExtracto();
     });
 
+    // Modal top 10 — abrir / cerrar
+    document.getElementById('btn-ver-top10')?.addEventListener('click', abrirTop10);
+    document.getElementById('btn-cerrar-top10')?.addEventListener('click', cerrarTop10);
+    document.getElementById('modal-top10')?.addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) cerrarTop10();
+    });
+
+    // Modal cuotas — abrir / cerrar
+    document.getElementById('btn-ver-cuotas')?.addEventListener('click', abrirCuotas);
+    document.getElementById('btn-cerrar-cuotas')?.addEventListener('click', cerrarCuotas);
+    document.getElementById('modal-cuotas')?.addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) cerrarCuotas();
+    });
+
     // ESC cierra modales
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
         if (document.getElementById('modal-extracto')?.style.display === 'flex') {
             cerrarExtracto();
+        } else if (document.getElementById('modal-top10')?.style.display === 'flex') {
+            cerrarTop10();
+        } else if (document.getElementById('modal-cuotas')?.style.display === 'flex') {
+            cerrarCuotas();
         } else if (document.getElementById('modal-clasificar')?.style.display === 'flex') {
             cerrarModal();
         }
     });
+}
+
+function abrirTop10() {
+    document.getElementById('modal-top10').style.display = 'flex';
+    dibujarBarrasModal();
+}
+
+function cerrarTop10() {
+    document.getElementById('modal-top10').style.display = 'none';
+}
+
+function abrirCuotas() {
+    document.getElementById('modal-cuotas').style.display = 'flex';
+}
+
+function cerrarCuotas() {
+    document.getElementById('modal-cuotas').style.display = 'none';
 }
 
 function abrirExtracto() {

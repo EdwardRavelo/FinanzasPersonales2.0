@@ -172,33 +172,30 @@
           </div>
         </div>
 
-        <!-- Top 10 comercios -->
+        <!-- Top 5 comercios (panel) -->
         <div class="bento-caja area-top">
-          <div class="bento-titulo">Top 10 Comercios</div>
-          <div class="chart-container">
-            <canvas id="grafico-top"></canvas>
+          <div class="bento-titulo">Top Comercios</div>
+          <ol id="lista-top5" class="top5-lista"></ol>
+          <div style="padding-top:8px; text-align:right;">
+            <button id="btn-ver-top10" class="btn-accion btn-secundario btn-ver-extracto">
+              Ver top 10 →
+            </button>
           </div>
         </div>
 
-        <!-- Cuotas pendientes -->
+        <!-- Cuotas pendientes (panel resumen) -->
         <div class="bento-caja area-cuotas">
           <div class="bento-titulo">Cuotas Pendientes</div>
-          <div class="tabla-wrapper">
-            <table class="tabla-elegante">
-              <thead>
-                <tr>
-                  <th>Comercio</th>
-                  <th style="text-align:center;">Cuota</th>
-                  <th style="text-align:right;">Monto</th>
-                </tr>
-              </thead>
-              <tbody id="cuerpo-cuotas"></tbody>
-              <tfoot id="pie-cuotas"></tfoot>
-            </table>
+          <div class="cuotas-resumen">
+            <div class="cuotas-total-display" id="cuotas-total-display">—</div>
+            <div class="cuotas-cantidad-display" id="cuotas-cantidad-display">—</div>
           </div>
-          <div style="padding-top:10px; text-align:right;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-end; padding-top:8px;">
             <button id="btn-ver-extracto" class="btn-accion btn-secundario btn-ver-extracto">
-              Ver extracto completo →
+              Ver extracto →
+            </button>
+            <button id="btn-ver-cuotas" class="btn-accion btn-secundario btn-ver-extracto">
+              Ver detalle →
             </button>
           </div>
         </div>
@@ -208,6 +205,48 @@
     </div><!-- /.app-container -->
 
   </div><!-- /#pantalla-app -->
+
+  <!-- ============================================================
+       MODAL: TOP 10 COMERCIOS
+  ============================================================ -->
+  <div class="modal-overlay" id="modal-top10"
+       role="dialog" aria-modal="true" aria-labelledby="top10-titulo" style="display:none;">
+    <div class="modal-caja modal-top10-caja">
+      <div class="modal-header">
+        <h2 id="top10-titulo">Top 10 Comercios</h2>
+        <button class="modal-close" id="btn-cerrar-top10" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-top10-chart">
+        <canvas id="grafico-top"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       MODAL: CUOTAS PENDIENTES
+  ============================================================ -->
+  <div class="modal-overlay" id="modal-cuotas"
+       role="dialog" aria-modal="true" aria-labelledby="cuotas-titulo" style="display:none;">
+    <div class="modal-caja modal-cuotas-caja">
+      <div class="modal-header">
+        <h2 id="cuotas-titulo">Cuotas Pendientes</h2>
+        <button class="modal-close" id="btn-cerrar-cuotas" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="extracto-tabla-wrapper">
+        <table class="tabla-elegante">
+          <thead>
+            <tr>
+              <th>Comercio</th>
+              <th style="text-align:center;">Cuota</th>
+              <th style="text-align:right;">Monto</th>
+            </tr>
+          </thead>
+          <tbody id="cuerpo-cuotas"></tbody>
+          <tfoot id="pie-cuotas"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <!-- ============================================================
        MODAL: EXTRACTO DEL MES
