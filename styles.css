@@ -402,6 +402,9 @@ select option { background-color: var(--bg-surface); }
   letter-spacing: 0.18em;
   margin-bottom: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .valor-kpi {
@@ -411,6 +414,8 @@ select option { background-color: var(--bg-surface); }
   color: var(--text-main);
   line-height: 1.1;
   margin-bottom: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .kpi-total .valor-kpi {
