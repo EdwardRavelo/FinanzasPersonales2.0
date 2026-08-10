@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#080c12">
+  <meta name="description" content="Observatorio Financiero personal — dashboard de gastos de tarjeta con importación de resúmenes bancarios.">
   <title>Finanzas — Observatorio Personal</title>
 
   <!-- Favicon SVG inline -->
@@ -14,7 +15,7 @@
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
 
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -44,7 +45,9 @@
     })();
   </script>
 
+  <!-- Capas ambientales: orbes de luz + grano de película -->
   <div class="fondo-luces" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
 
   <!-- ============================================================
        PANTALLA DE LOGIN
@@ -92,14 +95,14 @@
   ============================================================ -->
   <div id="pantalla-app" style="display:none;">
 
-    <div class="app-container">
+    <main class="app-container">
 
       <!-- ----------------------------------------------------------
            CABECERA
       ---------------------------------------------------------- -->
       <header class="cabecera">
         <div class="cabecera-top">
-          <h1>Dashboard de Finanzas</h1>
+          <h1>Observatorio <span class="acento">Financiero</span></h1>
         </div>
 
         <div class="controles-header">
@@ -116,7 +119,7 @@
       </header>
 
       <!-- ----------------------------------------------------------
-           BANNER DE MIGRACIÓN (solo si no hay datos)
+           BANNER DE ONBOARDING (solo si no hay datos)
       ---------------------------------------------------------- -->
       <div id="banner-migracion" class="banner-migracion" style="display:none;">
         <div class="banner-icono" aria-hidden="true">◈</div>
@@ -129,14 +132,13 @@
       <!-- ----------------------------------------------------------
            TARJETAS KPI (tres: ARS, USD, Movimientos)
       ---------------------------------------------------------- -->
-      <div class="contenedor-kpi">
+      <section class="contenedor-kpi" aria-label="Indicadores del mes">
 
         <div class="tarjeta kpi-total">
           <div class="titulo-kpi">Total consumo ARS</div>
           <div class="valor-kpi" id="val-total">
             <span class="skeleton skeleton-kpi"></span>
           </div>
-          <span class="tarjeta-icon" aria-hidden="true">◉</span>
         </div>
 
         <div class="tarjeta kpi-usd-card">
@@ -144,7 +146,6 @@
           <div class="valor-kpi" id="val-total-usd">
             <span class="skeleton skeleton-kpi"></span>
           </div>
-          <span class="tarjeta-icon" aria-hidden="true">◈</span>
         </div>
 
         <div class="tarjeta kpi-mov">
@@ -152,34 +153,33 @@
           <div class="valor-kpi" id="val-movimientos">
             <span class="skeleton skeleton-kpi"></span>
           </div>
-          <span class="tarjeta-icon" aria-hidden="true">◎</span>
         </div>
 
-      </div>
+      </section>
 
       <!-- ----------------------------------------------------------
            BENTO GRID
       ---------------------------------------------------------- -->
-      <div class="bento-grid">
+      <section class="bento-grid" aria-label="Paneles del dashboard">
 
         <!-- Evolución histórica -->
-        <div class="bento-caja area-evo">
+        <article class="bento-caja area-evo">
           <div class="bento-titulo">Evolución Histórica</div>
           <div class="chart-container">
             <canvas id="grafico-evolucion"></canvas>
           </div>
-        </div>
+        </article>
 
         <!-- Distribución por categoría -->
-        <div class="bento-caja area-torta">
+        <article class="bento-caja area-torta">
           <div class="bento-titulo">Distribución</div>
           <div class="chart-container">
             <canvas id="grafico-torta"></canvas>
           </div>
-        </div>
+        </article>
 
         <!-- Top 5 comercios (panel) -->
-        <div class="bento-caja area-top">
+        <article class="bento-caja area-top">
           <div class="bento-titulo">Top Comercios</div>
           <ol id="lista-top5" class="top5-lista"></ol>
           <div style="padding-top:8px; text-align:right;">
@@ -187,10 +187,10 @@
               Ver top 10 →
             </button>
           </div>
-        </div>
+        </article>
 
         <!-- Categoría top del mes -->
-        <div class="bento-caja area-cat-top">
+        <article class="bento-caja area-cat-top">
           <div class="bento-titulo">Categoría Top</div>
           <div class="cat-top-contenido">
             <div class="cat-top-nombre-wrap">
@@ -200,10 +200,10 @@
             <div class="cat-top-monto" id="cat-top-monto">—</div>
             <div class="cat-top-pct" id="cat-top-pct">—</div>
           </div>
-        </div>
+        </article>
 
         <!-- Cuotas pendientes (panel resumen) -->
-        <div class="bento-caja area-cuotas">
+        <article class="bento-caja area-cuotas">
           <div class="bento-titulo">Cuotas Pendientes</div>
           <div class="cuotas-resumen">
             <div class="cuotas-total-display" id="cuotas-total-display">—</div>
@@ -217,11 +217,11 @@
               Ver detalle →
             </button>
           </div>
-        </div>
+        </article>
 
-      </div><!-- /.bento-grid -->
+      </section><!-- /.bento-grid -->
 
-    </div><!-- /.app-container -->
+    </main><!-- /.app-container -->
 
   </div><!-- /#pantalla-app -->
 
@@ -361,6 +361,26 @@
   <script src="parser.js"></script>
   <script src="db.js"></script>
   <script src="app.js"></script>
+
+  <!-- Spotlight que sigue el cursor sobre las tarjetas de vidrio.
+       Autónomo: no depende de app.js ni de sus variables. -->
+  <script>
+    (function () {
+      function bindSpotlight() {
+        document.querySelectorAll('.tarjeta, .bento-caja').forEach(function (card) {
+          if (card.dataset.spot) return;
+          card.dataset.spot = '1';
+          card.addEventListener('pointermove', function (e) {
+            const r = card.getBoundingClientRect();
+            card.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
+            card.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
+          });
+        });
+      }
+      if (document.readyState !== 'loading') bindSpotlight();
+      else document.addEventListener('DOMContentLoaded', bindSpotlight);
+    })();
+  </script>
 
 </body>
 </html>
