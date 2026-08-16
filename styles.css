@@ -504,6 +504,17 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
 }
 .kpi-mov .valor-kpi { color: var(--text-main); }
 
+/* Nota al pie del KPI: créditos del mes y neto a pagar.
+   Vacía por defecto — no reserva espacio si el mes no tuvo créditos. */
+.nota-kpi:not(:empty) {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .tarjeta-icon { display: none; }
 
 /* ----------------------------------------------------------------

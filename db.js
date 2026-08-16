@@ -85,13 +85,14 @@ const DB = (() => {
 
     // ----------------------------------------------------------------
     // KPIs del mes
-    // Gasto neto: suma todos los movimientos incluyendo créditos/reintegros
-    // como montos negativos, reflejando lo mismo que muestra el banco.
+    // "Total consumo" = SÓLO consumos, igual que el "En pesos" del banco:
+    // los créditos y reintegros NO se restan del total, se informan aparte.
+    // (Antes se restaban y el KPI nunca coincidía con el homebanking.)
     // ----------------------------------------------------------------
     async function obtenerKPIs(mesPeriodo) {
         const { data, error } = await supabase
             .from('movimientos')
-            .select('monto_ars, monto_usd')
+            .select('monto_ars, monto_usd, es_reintegro')
             .eq('user_id', userId)
             .eq('mes_periodo', mesPeriodo);
 
@@ -99,15 +100,31 @@ const DB = (() => {
 
         let totalARS = 0;
         let totalUSD = 0;
+        let creditosARS = 0;
+        let creditosUSD = 0;
 
         data.forEach(m => {
-            if (m.monto_ars != null) totalARS += parseFloat(m.monto_ars);
-            if (m.monto_usd != null) totalUSD += parseFloat(m.monto_usd);
+            const ars = m.monto_ars != null ? parseFloat(m.monto_ars) : 0;
+            const usd = m.monto_usd != null ? parseFloat(m.monto_usd) : 0;
+
+            // Un crédito puede venir marcado con es_reintegro o simplemente
+            // con monto negativo, según el formato de origen.
+            if (m.es_reintegro || ars < 0 || usd < 0) {
+                creditosARS += ars;
+                creditosUSD += usd;
+            } else {
+                totalARS += ars;
+                totalUSD += usd;
+            }
         });
 
         return {
             totalARS,
             totalUSD,
+            // Negativos (o 0). Sumarlos al total da el neto a pagar.
+            creditosARS,
+            creditosUSD,
+            netoARS: totalARS + creditosARS,
             cantidadMovimientos: data.length,
         };
     }

@@ -12,9 +12,12 @@ const Parser = (() => {
         /^IMP DE SELLOS/i,
         /^DB IVA/i,
         /^IVA SERV\.DIGITAL/i,
+        /^IVA RG/i,
         /^INTERESES FINANCIACION/i,
         /^PERC\. IB SERV\. DIGITALES/i,
         /^PERCEPCI[OÓ]N AFIP/i,
+        /^IIBB PERCEP/i,
+        /^DB\.RG/i,
         /^CR\. RG 5463/i,
         /^CR\.RG 5617/i,
         /^CR PESOS P\/DEVOLUCION/i,
@@ -183,9 +186,18 @@ const Parser = (() => {
             const fecha = parsearFecha(String(fechaRaw));
             if (!fecha) continue;
 
-            const { ars, usd, esReintegro } = parsearMonto(String(montoRaw || ''));
+            let { ars, usd, esReintegro } = parsearMonto(String(montoRaw || ''));
             const { cuotaActual, cuotaTotal } = parsearCuota(cuotaRaw);
             const nombre = String(nombreRaw).trim();
+
+            // Mismo criterio que el formato viejo: los créditos bancarios (CR.)
+            // reducen la deuda. El banco suele listarlos ya en negativo acá,
+            // pero normalizamos por si alguna vez vienen en positivo.
+            if (esCreditoBancario(nombre)) {
+                if (ars !== null) ars = -Math.abs(ars);
+                if (usd !== null) usd = -Math.abs(usd);
+                esReintegro = true;
+            }
 
             resultados.push({
                 fecha,
@@ -306,12 +318,59 @@ const Parser = (() => {
         return isNaN(val) ? null : val;
     }
 
+    // Impuestos, percepciones y créditos del resumen PDF. No llevan cupón, así
+    // que la rama normal los descartaba entero (en julio: $15.352,07 de cargos
+    // y un crédito de $8.147,80 que nunca llegaban a la base).
+    // Formatos:
+    //   "IIBB PERCEP-CABA 2,00%( 7749,28) 154,98"
+    //   "IVA RG 4240 21%( 2977,04) 625,17"
+    //   "DB.RG 5617 30% ( 42950,16 ) 12.885,04"
+    //   "CR.RG 5617 30% M -8.147,80"
+    // Se toma el ÚLTIMO monto de la línea: los anteriores son la alícuota y la
+    // base imponible, no el importe cobrado.
+    function parsearCargoSinCuponPDF(resto, fecha, nombreArchivo) {
+        const montos = resto.match(/-?[\d.]+,\d{2}/g);
+        if (!montos) return null;
+
+        const monto = parsearMontoPDF(montos[montos.length - 1]);
+        if (monto === null) return null;
+
+        const nombre = resto
+            .replace(/\s*-?[\d.]+,\d{2}\s*$/, '')  // quitar el importe final
+            .replace(/\([^)]*\)/g, '')             // quitar la base imponible
+            .replace(/\s*[\d.,]+%\s*$/, '')        // quitar la alícuota
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // Guarda: sólo aceptamos líneas que reconocemos como cargo o crédito
+        // bancario. Sin esto, cualquier texto legal del resumen que termine en
+        // un número entraría como movimiento.
+        if (!nombre) return null;
+        if (!esCargoBancario(nombre) && !esCreditoBancario(nombre)) return null;
+
+        return {
+            fecha,
+            mes_periodo:    mesPeriodo(fecha),
+            comercio_crudo: nombre,
+            comercio:       null,
+            categoria:      'Cargos Bancarios',
+            cuota_actual:   null,
+            cuota_total:    null,
+            monto_ars:      monto,
+            monto_usd:      null,
+            es_reintegro:   monto < 0,
+            archivo_origen: nombreArchivo,
+        };
+    }
+
     // Parsea el resto de la línea luego de la fecha:
     //   normal    → "WENDYS ABASTO 386894 2.699,00"
     //   cuota     → "ONCITY.COM C.12/18 001594 29.166,61"
     //   USD       → "CLAUDE.AI SUBSCRIPTION USD 20,00 706557 20,00"
     //   cargo     → "879,98"  (sin cupón, solo monto)
     function parsearRestoFilaPDF(resto, fecha, nombreArchivo) {
+        if (debeIgnorar(resto)) return null;
+
         // Cargo bancario: solo un monto sin cupón
         if (/^-?[\d.]+,\d{2}$/.test(resto)) {
             const monto = parsearMontoPDF(resto);
@@ -324,7 +383,8 @@ const Parser = (() => {
                 categoria:      'Cargos Bancarios',
                 cuota_actual:   null,
                 cuota_total:    null,
-                monto_ars:      Math.abs(monto),
+                // El signo se conserva: los créditos deben restar, no sumar.
+                monto_ars:      monto,
                 monto_usd:      null,
                 es_reintegro:   monto < 0,
                 archivo_origen: nombreArchivo,
@@ -333,7 +393,11 @@ const Parser = (() => {
 
         // Transacción normal: buscar número de cupón (exactamente 6 dígitos)
         const voucherMatch = resto.match(/\b(\d{6})\b/);
-        if (!voucherMatch) return null;
+
+        // Impuestos, percepciones y créditos no llevan cupón. Vienen como
+        // "IIBB PERCEP-CABA 2,00%( 7749,28) 154,98" o "CR.RG 5617 30% M -8.147,80":
+        // descripción + base imponible entre paréntesis + monto final.
+        if (!voucherMatch) return parsearCargoSinCuponPDF(resto, fecha, nombreArchivo);
 
         const voucherIdx  = voucherMatch.index;
         const desc        = resto.substring(0, voucherIdx).trim();
@@ -341,8 +405,10 @@ const Parser = (() => {
 
         if (!desc || debeIgnorar(desc)) return null;
 
-        // Detectar transacción en USD por la marca "USD" en la descripción
-        const esUSD = /\bUSD\b/i.test(desc);
+        // Detectar transacción en USD por la marca "USD" en la descripción.
+        // El PDF a veces pega la marca al token anterior ("in1TomsYBUSD 20,00"),
+        // así que además de \bUSD\b aceptamos "USD <monto>" al final de la desc.
+        const esUSD = /\bUSD\b/i.test(desc) || /USD\s*[\d.]*,\d{2}\s*$/i.test(desc);
 
         // Extraer cuota embebida en la descripción: C.XX/YY
         const cuotaM     = desc.match(/\bC\.(\d+)\/(\d+)\b/);
@@ -352,7 +418,7 @@ const Parser = (() => {
         // Limpiar descripción: quitar cuota y etiqueta USD
         const nombre = desc
             .replace(/\bC\.\d+\/\d+\b/, '')
-            .replace(/\bUSD\s+[\d.,]+/, '')
+            .replace(/USD\s*[\d.]*,\d{2}/i, '')
             .replace(/\s+/g, ' ')
             .trim();
 
@@ -363,13 +429,15 @@ const Parser = (() => {
 
         let ars = null, usd = null, esReintegro = false;
 
+        // El signo se conserva: un reintegro guardado en positivo se sumaba al
+        // total en lugar de restarse, duplicando el error (2x el monto).
         if (esUSD) {
             // El último valor es el monto USD; pesos está vacío
-            usd          = montos.length > 0 ? Math.abs(montos[montos.length - 1]) : null;
+            usd          = montos.length > 0 ? montos[montos.length - 1] : null;
             esReintegro  = montos.length > 0 && montos[montos.length - 1] < 0;
         } else {
-            ars          = montos.length > 0 ? Math.abs(montos[0]) : null;
-            usd          = montos.length > 1 ? Math.abs(montos[1]) : null;
+            ars          = montos.length > 0 ? montos[0] : null;
+            usd          = montos.length > 1 ? montos[1] : null;
             esReintegro  = montos.length > 0 && montos[0] < 0;
         }
 
@@ -405,11 +473,16 @@ const Parser = (() => {
         const arrayBuffer = await file.arrayBuffer();
         const pdf         = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-        const resultados = [];
-        const FECHA_RE   = /^(\d{2})-([A-Za-z]{3})-(\d{2,4}) (.*)/;
+        const resultados   = [];
+        const cargosVistos = new Set();
+        const FECHA_RE     = /^(\d{2})-([A-Za-z]{3})-(\d{2,4}) (.*)/;
 
-        // La página 1 es la portada-resumen; los movimientos arrancan en la 2
-        for (let n = 2; n <= pdf.numPages; n++) {
+        // La página 1 es la portada-resumen, pero ahí el banco lista créditos
+        // (ej. "CR.RG 5617 30% M -8.147,80") que no se repiten en el detalle.
+        // La recorremos igual, quedándonos SÓLO con cargos/créditos conocidos:
+        // el resto de la portada (totales, vencimientos) no pasa la guarda de
+        // parsearCargoSinCuponPDF ni tiene cupón, así que se descarta solo.
+        for (let n = 1; n <= pdf.numPages; n++) {
             const page = await pdf.getPage(n);
             const tc   = await page.getTextContent();
 
@@ -447,7 +520,22 @@ const Parser = (() => {
                 const fecha = `${anio}-${String(mesNum).padStart(2, '0')}-${dia}`;
 
                 const mov = parsearRestoFilaPDF(resto.trim(), fecha, file.name);
-                if (mov) resultados.push(mov);
+                if (!mov) continue;
+
+                // De la portada sólo aceptamos cargos y créditos bancarios.
+                if (n === 1 && mov.categoria !== 'Cargos Bancarios') continue;
+
+                // Los cargos sin cupón no tienen identificador propio: si el
+                // mismo aparece en la portada y en el detalle, lo contaríamos
+                // dos veces. Las compras normales sí pueden repetirse legítimamente
+                // (mismo comercio y monto el mismo día), y llevan cupón distinto.
+                if (mov.categoria === 'Cargos Bancarios') {
+                    const clave = `${mov.fecha}|${mov.comercio_crudo}|${mov.monto_ars}`;
+                    if (cargosVistos.has(clave)) continue;
+                    cargosVistos.add(clave);
+                }
+
+                resultados.push(mov);
             }
         }
 

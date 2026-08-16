@@ -270,6 +270,16 @@ function dibujarKPIs(kpis) {
         kpis.totalUSD > 0 ? `u$s ${kpis.totalUSD.toFixed(2)}` : '—';
     document.getElementById('val-movimientos').textContent =
         kpis.cantidadMovimientos;
+
+    // Los créditos no se restan del total (igual que el banco): se informan
+    // aparte, junto con el neto que realmente se paga.
+    const nota = document.getElementById('val-creditos');
+    if (nota) {
+        const cred = kpis.creditosARS || 0;
+        nota.textContent = cred < 0
+            ? `${formatARS(cred)} en créditos · neto ${formatARS(kpis.netoARS)}`
+            : '';
+    }
 }
 
 // ----------------------------------------------------------------
