@@ -92,7 +92,7 @@ const DB = (() => {
     async function obtenerKPIs(mesPeriodo) {
         const { data, error } = await supabase
             .from('movimientos')
-            .select('monto_ars, monto_usd, es_reintegro')
+            .select('monto_ars, monto_usd, es_reintegro, cuota_actual')
             .eq('user_id', userId)
             .eq('mes_periodo', mesPeriodo);
 
@@ -102,6 +102,10 @@ const DB = (() => {
         let totalUSD = 0;
         let creditosARS = 0;
         let creditosUSD = 0;
+        // Arrastre vs consumo nuevo: en un resumen típico el grueso del total
+        // son cuotas de compras viejas, no gastos del ciclo.
+        let cuotasARS = 0;
+        let cicloARS  = 0;
 
         data.forEach(m => {
             const ars = m.monto_ars != null ? parseFloat(m.monto_ars) : 0;
@@ -115,6 +119,11 @@ const DB = (() => {
             } else {
                 totalARS += ars;
                 totalUSD += usd;
+                // cuota_actual > 1 ⇒ la compra es de un ciclo anterior. La
+                // cuota 1 se cuenta como consumo del ciclo, que es cuando
+                // efectivamente se compró.
+                if (m.cuota_actual > 1) cuotasARS += ars;
+                else                    cicloARS  += ars;
             }
         });
 
@@ -126,6 +135,8 @@ const DB = (() => {
             creditosUSD,
             netoARS: totalARS + creditosARS,
             netoUSD: totalUSD + creditosUSD,
+            cuotasARS,
+            cicloARS,
             cantidadMovimientos: data.length,
         };
     }

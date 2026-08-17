@@ -317,10 +317,24 @@ function dibujarKPIs(kpis) {
     document.getElementById('val-movimientos').textContent =
         kpis.cantidadMovimientos;
 
-    // Se deja vacío a propósito: la nota de créditos agregaba un segundo
-    // número que competía con el total sin decir nada accionable.
+    // La nota reusa el hueco que dejó la línea de créditos (ya estilado y
+    // colapsable vía .nota-kpi:not(:empty), así que no altera el layout).
+    // Muestra de qué está hecho el total: cuánto es arrastre de cuotas
+    // viejas y cuánto se consumió en el ciclo — en un resumen típico las
+    // cuotas son la mayor parte, y eso no se veía en ningún panel.
     const nota = document.getElementById('val-creditos');
-    if (nota) nota.textContent = '';
+    if (nota) {
+        const cuotas = kpis.cuotasARS || 0;
+        const ciclo  = kpis.cicloARS  || 0;
+        const bruto  = cuotas + ciclo;
+        if (cuotas > 0 && bruto > 0) {
+            const pct = Math.round(cuotas / bruto * 100);
+            nota.textContent =
+                `cuotas ${formatARS(cuotas)} (${pct}%) · ciclo ${formatARS(ciclo)}`;
+        } else {
+            nota.textContent = '';
+        }
+    }
 }
 
 // ----------------------------------------------------------------
