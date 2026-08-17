@@ -125,6 +125,7 @@ const DB = (() => {
             creditosARS,
             creditosUSD,
             netoARS: totalARS + creditosARS,
+            netoUSD: totalUSD + creditosUSD,
             cantidadMovimientos: data.length,
         };
     }

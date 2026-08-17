@@ -143,13 +143,32 @@ const Parser = (() => {
     }
 
     // ----------------------------------------------------------------
-    // Sobreescribir mes_periodo de todas las filas con el mes de liquidación
-    // = el mes que aparece con mayor frecuencia entre las fechas parseadas.
+    // Sobreescribir mes_periodo de todas las filas con el mes de liquidación.
     // Esto asegura que las cuotas (cuya fecha es la de compra original, no
     // la del resumen) queden asignadas al mes correcto de facturación.
+    //
+    // El resumen cierra cada 4 semanas en jueves, no por mes calendario, así
+    // que el mes se deriva del CICLO DE FACTURACIÓN (ver ciclos.js) al que
+    // pertenece el movimiento más reciente del archivo — el más reciente y no
+    // la moda, porque las cuotas viejas arrastran fechas de meses anteriores.
+    //
+    // `Ciclos` puede no estar cargado (parser usado en un arnés headless):
+    // en ese caso cae al criterio anterior, el mes más frecuente.
     // ----------------------------------------------------------------
     function normalizarMesPeriodo(filas) {
         if (!filas.length) return;
+
+        if (typeof Ciclos !== 'undefined') {
+            // Movimiento más reciente = el ciclo que este archivo representa.
+            const ultima = filas.reduce((max, m) =>
+                (m.fecha && m.fecha > max) ? m.fecha : max, '');
+            const periodo = ultima ? Ciclos.periodoDe(ultima) : null;
+            if (periodo) {
+                filas.forEach(m => { m.mes_periodo = periodo; });
+                return;
+            }
+        }
+
         const conteo = {};
         filas.forEach(m => {
             if (m.mes_periodo) conteo[m.mes_periodo] = (conteo[m.mes_periodo] || 0) + 1;

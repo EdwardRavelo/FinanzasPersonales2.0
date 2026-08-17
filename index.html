@@ -130,12 +130,44 @@
       </div>
 
       <!-- ----------------------------------------------------------
+           PANEL DE CIERRE — cuenta regresiva al próximo cierre.
+           El resumen cierra cada 4 semanas en jueves (ver ciclos.js),
+           no a fin de mes, así que la fecha no es evidente de por sí.
+      ---------------------------------------------------------- -->
+      <section class="panel-cierre" aria-label="Próximo cierre de la tarjeta">
+
+        <div class="cierre-cuenta">
+          <div class="cierre-dias" id="cierre-dias">—</div>
+          <div class="cierre-dias-sub" id="cierre-dias-sub">días para el cierre</div>
+        </div>
+
+        <div class="cierre-info">
+          <div class="cierre-encabezado">
+            <span class="titulo-kpi">Próximo cierre</span>
+            <strong class="cierre-fecha" id="cierre-fecha">—</strong>
+          </div>
+
+          <div class="cierre-barra" id="cierre-barra-track" role="progressbar"
+               aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+               aria-label="Progreso del ciclo de facturación">
+            <div class="cierre-barra-fill" id="cierre-barra"></div>
+          </div>
+
+          <div class="cierre-meta">
+            <span id="cierre-rango">—</span>
+            <span id="cierre-vence"></span>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ----------------------------------------------------------
            TARJETAS KPI (tres: ARS, USD, Movimientos)
       ---------------------------------------------------------- -->
       <section class="contenedor-kpi" aria-label="Indicadores del mes">
 
         <div class="tarjeta kpi-total">
-          <div class="titulo-kpi">Total consumo ARS</div>
+          <div class="titulo-kpi">Total a pagar ARS</div>
           <div class="valor-kpi" id="val-total">
             <span class="skeleton skeleton-kpi"></span>
           </div>
@@ -143,7 +175,7 @@
         </div>
 
         <div class="tarjeta kpi-usd-card">
-          <div class="titulo-kpi">Total consumo USD</div>
+          <div class="titulo-kpi">Total a pagar USD</div>
           <div class="valor-kpi" id="val-total-usd">
             <span class="skeleton skeleton-kpi"></span>
           </div>
@@ -345,6 +377,14 @@
           <span>⚠️</span>
           <span><strong class="import-adv-mes"></strong> ya tiene datos — serán reemplazados por este archivo.</span>
         </div>
+        <!-- Sólo aparece cuando dos cierres caen en el mismo mes calendario
+             (pasa ~1 vez al año): ahí el mes guarda DOS resúmenes distintos
+             y reemplazarlo borraría el otro. -->
+        <div id="import-colision" class="import-advertencia" style="display:none;">
+          <span>⚠️</span>
+          <span><strong id="import-colision-mes"></strong> contiene dos cierres de tarjeta, así que
+            guarda dos resúmenes distintos. Importar acá reemplaza <em>los dos</em>.</span>
+        </div>
         <div class="import-acciones">
           <button id="btn-confirmar-import" class="btn-accion" onclick="confirmarImportacion()">
             Importar
@@ -359,6 +399,7 @@
 
   <!-- Scripts (orden importa) -->
   <script src="config.js"></script>
+  <script src="ciclos.js"></script>
   <script src="parser.js"></script>
   <script src="db.js"></script>
   <script src="app.js"></script>

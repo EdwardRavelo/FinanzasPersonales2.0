@@ -420,7 +420,8 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
    SUPERFICIE DE VIDRIO COMPARTIDA (KPI + bento) con spotlight
    ---------------------------------------------------------------- */
 .tarjeta,
-.bento-caja {
+.bento-caja,
+.panel-cierre {
   position: relative;
   border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
@@ -435,13 +436,120 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
 }
 
 .tarjeta:hover,
-.bento-caja:hover {
+.bento-caja:hover,
+.panel-cierre:hover {
   border-color: var(--glass-border-hover);
   box-shadow: var(--shadow-float), var(--inset-top);
   --spot: rgba(201, 169, 110, 0.13);
 }
 
 .tarjeta:hover { transform: translateY(-4px); }
+
+/* ----------------------------------------------------------------
+   PANEL DE CIERRE — cuenta regresiva al próximo cierre del resumen
+   ---------------------------------------------------------------- */
+.panel-cierre {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 32px;
+  padding: 22px 30px;
+  margin-bottom: 16px;
+  animation: reveal 0.7s var(--ease) both;
+  animation-delay: 0.06s;
+}
+
+.cierre-cuenta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-right: 32px;
+  border-right: 1px solid var(--glass-border);
+  min-width: 132px;
+}
+
+.cierre-dias {
+  font-family: var(--font-display);
+  font-size: clamp(52px, 6.4vw, 82px);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 48px var(--gold-glow);
+}
+
+/* Estado del último tramo: el cierre es inminente */
+.panel-cierre.es-inminente .cierre-dias {
+  color: var(--red);
+  text-shadow: 0 0 48px var(--red-dim);
+}
+.panel-cierre.es-inminente .cierre-barra-fill {
+  background: linear-gradient(90deg, var(--red-dim), var(--red));
+}
+
+.cierre-dias-sub {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.cierre-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cierre-encabezado {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.cierre-fecha {
+  font-family: var(--font-display);
+  font-size: clamp(17px, 2vw, 23px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  text-transform: capitalize;
+}
+
+.cierre-barra {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--gold-dim);
+  border: 1px solid var(--glass-border);
+  overflow: hidden;
+}
+
+.cierre-barra-fill {
+  height: 100%;
+  width: 0;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--gold-dim), var(--gold));
+  transition: width 0.9s var(--ease);
+}
+
+.cierre-meta {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ----------------------------------------------------------------
    TARJETAS KPI
@@ -1033,6 +1141,14 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
 
   .contenedor-kpi { grid-template-columns: 1fr; }
   .tarjeta { min-height: 110px; padding: 20px 22px; }
+
+  /* El divisor vertical no funciona apilado: pasa a horizontal */
+  .panel-cierre { grid-template-columns: 1fr; gap: 18px; padding: 20px 22px; }
+  .cierre-cuenta {
+    padding-right: 0; padding-bottom: 16px;
+    border-right: none; border-bottom: 1px solid var(--glass-border);
+    width: 100%;
+  }
 
   .bento-grid { grid-template-columns: 1fr; grid-template-rows: auto; gap: 14px; }
   .area-evo, .area-torta, .area-top, .area-cat-top, .area-cuotas { grid-column: span 1; }

@@ -177,6 +177,8 @@ function mostrarLogin() {
 function mostrarApp() {
     document.getElementById('pantalla-login').style.display = 'none';
     document.getElementById('pantalla-app').style.display   = 'block';
+    // Independiente de los datos: se dibuja aunque el usuario no tenga movimientos
+    dibujarCierre();
 }
 
 // ----------------------------------------------------------------
@@ -261,25 +263,64 @@ function dibujarDashboard(datos) {
 }
 
 // ----------------------------------------------------------------
+// PANEL DE CIERRE — cuenta regresiva al próximo cierre del resumen
+//
+// No depende del mes seleccionado: siempre mira el ciclo en curso
+// respecto de hoy, así que se dibuja una sola vez al arrancar.
+// ----------------------------------------------------------------
+function dibujarCierre() {
+    const panel = document.querySelector('.panel-cierre');
+    if (!panel || typeof Ciclos === 'undefined') return;
+
+    const cierre = Ciclos.proximoCierre();
+    const dias   = Ciclos.diasHastaCierre();
+    const rango  = Ciclos.rangoDe(cierre);
+    const vence  = Ciclos.vencimientoDe(cierre);
+
+    document.getElementById('cierre-dias').textContent = dias;
+    document.getElementById('cierre-dias-sub').textContent =
+        dias === 0 ? 'cierra hoy'
+      : dias === 1 ? 'día para el cierre'
+      : 'días para el cierre';
+
+    document.getElementById('cierre-fecha').textContent = Ciclos.formatearFecha(cierre);
+
+    // El ciclo es [desde, hasta): el último día facturado es el previo al cierre
+    const ultimoDia = new Date(Date.parse(rango.hasta) - 86400000).toISOString().slice(0, 10);
+    document.getElementById('cierre-rango').textContent =
+        `ciclo ${Ciclos.formatearCorta(rango.desde)} → ${Ciclos.formatearCorta(ultimoDia)}`;
+
+    document.getElementById('cierre-vence').textContent =
+        vence ? `vence ${Ciclos.formatearCorta(vence)}` : '';
+
+    const pct = Math.round(Ciclos.progresoCiclo() * 100);
+    document.getElementById('cierre-barra').style.width = `${pct}%`;
+    document.getElementById('cierre-barra-track').setAttribute('aria-valuenow', pct);
+
+    panel.classList.toggle('es-inminente', dias <= 3);
+}
+
+// ----------------------------------------------------------------
 // KPIs
 // ----------------------------------------------------------------
 function dibujarKPIs(kpis) {
+    // Los KPIs muestran el NETO: los créditos ya vienen restados, porque lo
+    // que importa es el número que se paga. El banco en cambio informa el
+    // consumo bruto en su "En pesos", así que las dos cifras no coinciden
+    // aunque los datos sean los mismos.
+    const netoUSD = kpis.netoUSD != null ? kpis.netoUSD : kpis.totalUSD;
+
     document.getElementById('val-total').textContent =
-        formatARS(kpis.totalARS);
+        formatARS(kpis.netoARS != null ? kpis.netoARS : kpis.totalARS);
     document.getElementById('val-total-usd').textContent =
-        kpis.totalUSD > 0 ? `u$s ${kpis.totalUSD.toFixed(2)}` : '—';
+        netoUSD > 0 ? `u$s ${netoUSD.toFixed(2)}` : '—';
     document.getElementById('val-movimientos').textContent =
         kpis.cantidadMovimientos;
 
-    // Los créditos no se restan del total (igual que el banco): se informan
-    // aparte, junto con el neto que realmente se paga.
+    // Se deja vacío a propósito: la nota de créditos agregaba un segundo
+    // número que competía con el total sin decir nada accionable.
     const nota = document.getElementById('val-creditos');
-    if (nota) {
-        const cred = kpis.creditosARS || 0;
-        nota.textContent = cred < 0
-            ? `${formatARS(cred)} en créditos · neto ${formatARS(kpis.netoARS)}`
-            : '';
-    }
+    if (nota) nota.textContent = '';
 }
 
 // ----------------------------------------------------------------
@@ -1048,6 +1089,17 @@ function actualizarAdvertenciaImport() {
         adv.style.display = 'flex';
     } else {
         adv.style.display = 'none';
+    }
+
+    // Aviso extra si el mes destino abarca dos cierres de tarjeta
+    const col = document.getElementById('import-colision');
+    if (col && typeof Ciclos !== 'undefined' && mesSel) {
+        const cierre  = Ciclos.cierreDe(`${mesSel}-15`);
+        const colision = cierre && Ciclos.hayColision(cierre);
+        if (colision) {
+            document.getElementById('import-colision-mes').textContent = formatearMes(mesSel);
+        }
+        col.style.display = colision ? 'flex' : 'none';
     }
 }
 
