@@ -78,14 +78,29 @@ const Ciclos = (() => {
         return cierreDe(hoyUTC());
     }
 
-    function diasHastaCierre() {
-        return Math.round((aUTC(proximoCierre()) - hoyUTC()) / MS_DIA);
+    // ¿Hoy (u otra fecha) es exactamente un día de cierre?
+    function esDiaDeCierre(fecha) {
+        const t = aUTC(fecha === undefined ? hoyUTC() : fecha);
+        return t !== null && (t - ANCLA_UTC) % MS_CICLO === 0;
     }
 
-    // Progreso del ciclo en curso, 0..1 — para la barra del panel
-    function progresoCiclo() {
-        const { desde, hasta } = rangoDe(proximoCierre());
-        const total       = (aUTC(hasta) - aUTC(desde)) / MS_DIA;
+    // Cierre que le toca mostrar al panel. El día del cierre, `cierreDe()`
+    // ya devuelve el siguiente (esa fecha pertenece al ciclo nuevo), así que
+    // la cuenta saltaría de 1 a 28 y nunca se vería "cierra hoy". Ese día se
+    // muestra el cierre de hoy, que es el evento que le importa al usuario.
+    function cierreVigente() {
+        return esDiaDeCierre() ? aISO(hoyUTC()) : proximoCierre();
+    }
+
+    function diasHastaCierre(cierreISO) {
+        const c = aUTC(cierreISO || cierreVigente());
+        return c === null ? null : Math.round((c - hoyUTC()) / MS_DIA);
+    }
+
+    // Progreso del ciclo, 0..1 — para la barra del panel
+    function progresoCiclo(cierreISO) {
+        const { desde, hasta } = rangoDe(cierreISO || cierreVigente());
+        const total        = (aUTC(hasta) - aUTC(desde)) / MS_DIA;
         const transcurrido = (hoyUTC() - aUTC(desde)) / MS_DIA;
         return Math.min(1, Math.max(0, transcurrido / total));
     }
@@ -178,6 +193,8 @@ const Ciclos = (() => {
         cierreDe,
         rangoDe,
         proximoCierre,
+        cierreVigente,
+        esDiaDeCierre,
         diasHastaCierre,
         progresoCiclo,
         periodoDe,

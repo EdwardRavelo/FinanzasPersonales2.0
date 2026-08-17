@@ -24,6 +24,9 @@ let mesesConDataActual    = [];
 // Último payload del dashboard (para redibujar al cambiar de tema)
 let datosActuales = null;
 
+// Handle del timeout que refresca la cuenta regresiva del cierre a medianoche
+let timerCierre = null;
+
 // ----------------------------------------------------------------
 // PALETA Y CONFIG GLOBAL DE CHART.JS
 // ----------------------------------------------------------------
@@ -266,20 +269,40 @@ function dibujarDashboard(datos) {
 // PANEL DE CIERRE — cuenta regresiva al próximo cierre del resumen
 //
 // No depende del mes seleccionado: siempre mira el ciclo en curso
-// respecto de hoy, así que se dibuja una sola vez al arrancar.
+// respecto de hoy. Se redibuja solo al cambiar el día, sin recargar.
 // ----------------------------------------------------------------
+function programarActualizacionCierre() {
+    if (timerCierre) clearTimeout(timerCierre);
+
+    // La cuenta está en días, así que sólo cambia a medianoche: en vez de un
+    // interval corriendo todo el tiempo, se apunta un único timeout al primer
+    // segundo del día siguiente (hora local, que es la que ve el usuario).
+    const ahora     = new Date();
+    const medianoche = new Date(
+        ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 1, 0, 0, 5
+    );
+
+    timerCierre = setTimeout(dibujarCierre, medianoche - ahora);
+}
+
 function dibujarCierre() {
     const panel = document.querySelector('.panel-cierre');
     if (!panel || typeof Ciclos === 'undefined') return;
 
-    const cierre = Ciclos.proximoCierre();
-    const dias   = Ciclos.diasHastaCierre();
+    // Reprograma en cada dibujo: al dispararse a medianoche, esta misma
+    // llamada deja armado el timeout del día siguiente.
+    programarActualizacionCierre();
+
+    // cierreVigente() y no proximoCierre(): el día del cierre hay que mostrar
+    // el de hoy, o la cuenta salta de 1 a 28 sin pasar por "cierra hoy".
+    const cierre = Ciclos.cierreVigente();
+    const dias   = Ciclos.diasHastaCierre(cierre);
     const rango  = Ciclos.rangoDe(cierre);
     const vence  = Ciclos.vencimientoDe(cierre);
 
     document.getElementById('cierre-dias').textContent = dias;
     document.getElementById('cierre-dias-sub').textContent =
-        dias === 0 ? 'cierra hoy'
+        dias === 0 ? 'el resumen cierra hoy'
       : dias === 1 ? 'día para el cierre'
       : 'días para el cierre';
 
@@ -293,7 +316,7 @@ function dibujarCierre() {
     document.getElementById('cierre-vence').textContent =
         vence ? `vence ${Ciclos.formatearCorta(vence)}` : '';
 
-    const pct = Math.round(Ciclos.progresoCiclo() * 100);
+    const pct = Math.round(Ciclos.progresoCiclo(cierre) * 100);
     document.getElementById('cierre-barra').style.width = `${pct}%`;
     document.getElementById('cierre-barra-track').setAttribute('aria-valuenow', pct);
 
@@ -1001,6 +1024,14 @@ function bindEventos() {
     document.getElementById('btn-cerrar-cuotas')?.addEventListener('click', cerrarCuotas);
     document.getElementById('modal-cuotas')?.addEventListener('click', (e) => {
         if (e.target === e.currentTarget) cerrarCuotas();
+    });
+
+    // Los timeouts no son confiables como única fuente para la cuenta de días:
+    // si la máquina se suspende o el navegador throttlea la pestaña en segundo
+    // plano, el de medianoche puede dispararse tarde. Al volver a primer plano
+    // se recalcula, y eso además reprograma el siguiente.
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) dibujarCierre();
     });
 
     // ESC cierra modales
