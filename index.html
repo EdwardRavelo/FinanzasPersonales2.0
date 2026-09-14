@@ -162,6 +162,37 @@
       </section>
 
       <!-- ----------------------------------------------------------
+           PANEL DE RITMO — gasto del ciclo contra el ciclo anterior
+           a la misma altura (mismo día del ciclo). Sólo consumo del
+           ciclo: las cuotas arrastradas son fijas y taparían la señal
+           (ver obtenerRitmo en db.js). Arranca oculto: sin mes previo
+           importado no hay nada que comparar.
+      ---------------------------------------------------------- -->
+      <section class="panel-ritmo" id="panel-ritmo"
+               aria-label="Comparación de gasto con el ciclo anterior" style="display:none;">
+
+        <div class="ritmo-cuenta">
+          <div class="ritmo-pct" id="ritmo-pct">—</div>
+          <div class="ritmo-pct-sub" id="ritmo-pct-sub">que el mes pasado</div>
+        </div>
+
+        <div class="ritmo-info">
+          <div class="ritmo-encabezado">
+            <span class="titulo-kpi">Ritmo de gasto</span>
+            <strong class="ritmo-monto" id="ritmo-monto">—</strong>
+          </div>
+
+          <div class="ritmo-detalle" id="ritmo-detalle">—</div>
+
+          <div class="ritmo-meta">
+            <span id="ritmo-rango">—</span>
+            <span id="ritmo-nota">consumo del ciclo · sin cuotas</span>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ----------------------------------------------------------
            TARJETAS KPI (tres: ARS, USD, Movimientos)
       ---------------------------------------------------------- -->
       <section class="contenedor-kpi" aria-label="Indicadores del mes">

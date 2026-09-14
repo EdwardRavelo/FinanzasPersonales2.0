@@ -421,7 +421,8 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
    ---------------------------------------------------------------- */
 .tarjeta,
 .bento-caja,
-.panel-cierre {
+.panel-cierre,
+.panel-ritmo {
   position: relative;
   border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
@@ -437,7 +438,8 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
 
 .tarjeta:hover,
 .bento-caja:hover,
-.panel-cierre:hover {
+.panel-cierre:hover,
+.panel-ritmo:hover {
   border-color: var(--glass-border-hover);
   box-shadow: var(--shadow-float), var(--inset-top);
   --spot: rgba(201, 169, 110, 0.13);
@@ -540,6 +542,107 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
 }
 
 .cierre-meta {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------------
+   PANEL DE RITMO — este ciclo contra el anterior a la misma altura
+   Misma anatomía que .panel-cierre (número grande + bloque de info),
+   pero el acento no es el oro sino el semáforo: verde si se gastó
+   menos que el ciclo pasado, rojo si se gastó más.
+   ---------------------------------------------------------------- */
+.panel-ritmo {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 32px;
+  padding: 22px 30px;
+  margin-bottom: 16px;
+  animation: reveal 0.7s var(--ease) both;
+  animation-delay: 0.09s;
+}
+
+.ritmo-cuenta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-right: 32px;
+  border-right: 1px solid var(--glass-border);
+  min-width: 132px;
+}
+
+.ritmo-pct {
+  font-family: var(--font-display);
+  font-size: clamp(44px, 5.4vw, 68px);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.panel-ritmo.es-menos .ritmo-pct {
+  color: var(--green);
+  text-shadow: 0 0 48px var(--green-dim);
+}
+.panel-ritmo.es-mas .ritmo-pct {
+  color: var(--red);
+  text-shadow: 0 0 48px var(--red-dim);
+}
+.panel-ritmo.es-menos .ritmo-monto { color: var(--green); }
+.panel-ritmo.es-mas   .ritmo-monto { color: var(--red); }
+
+.ritmo-pct-sub {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.ritmo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ritmo-encabezado {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.ritmo-monto {
+  font-family: var(--font-display);
+  font-size: clamp(17px, 2vw, 23px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.ritmo-detalle {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.ritmo-meta {
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
@@ -1145,6 +1248,13 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
   /* El divisor vertical no funciona apilado: pasa a horizontal */
   .panel-cierre { grid-template-columns: 1fr; gap: 18px; padding: 20px 22px; }
   .cierre-cuenta {
+    padding-right: 0; padding-bottom: 16px;
+    border-right: none; border-bottom: 1px solid var(--glass-border);
+    width: 100%;
+  }
+
+  .panel-ritmo { grid-template-columns: 1fr; gap: 18px; padding: 20px 22px; }
+  .ritmo-cuenta {
     padding-right: 0; padding-bottom: 16px;
     border-right: none; border-bottom: 1px solid var(--glass-border);
     width: 100%;

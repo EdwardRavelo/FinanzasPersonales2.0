@@ -134,6 +134,41 @@ const Ciclos = (() => {
         return Object.keys(cuenta).sort((a, b) => cuenta[b] - cuenta[a])[0];
     }
 
+    // ----------------------------------------------------------------
+    // Inverso de periodoDe(): el cierre del ciclo etiquetado 'YYYY-MM'.
+    //
+    // No se puede despejar con aritmética porque la etiqueta sale de un
+    // conteo de días, así que se prueban los cierres vecinos y se acepta
+    // el que periodoDe() rotula con ese mes. Con 13 ciclos por año hay
+    // meses con dos (ver hayColision); ahí gana el primero, que es el que
+    // arranca antes.
+    // ----------------------------------------------------------------
+    function cierreDePeriodo(mes) {
+        if (!/^\d{4}-\d{2}$/.test(String(mes))) return null;
+        const base = aUTC(cierreDe(`${mes}-15`));
+        for (let i = -2; i <= 2; i++) {
+            const c = aISO(base + i * MS_CICLO);
+            if (periodoDe(rangoDe(c).desde) === mes) return c;
+        }
+        return null;
+    }
+
+    // Día del ciclo transcurrido a hoy, 1-based (el primer día del ciclo
+    // es el día 1). 0 si el ciclo todavía no empezó, DIAS_CICLO si ya cerró.
+    function diaDelCiclo(cierreISO) {
+        const { desde, hasta } = rangoDe(cierreISO);
+        if (hoyUTC() >= aUTC(hasta)) return DIAS_CICLO;
+        const d = Math.floor((hoyUTC() - aUTC(desde)) / MS_DIA) + 1;
+        return Math.max(0, Math.min(DIAS_CICLO, d));
+    }
+
+    // La fecha (exclusiva) hasta la que hay que contar para comparar un
+    // ciclo con otro a la misma altura: `dia` días desde su inicio.
+    function corteDelCiclo(cierreISO, dia) {
+        const { desde } = rangoDe(cierreISO);
+        return aISO(aUTC(desde) + dia * MS_DIA);
+    }
+
     // ¿El ciclo vecino comparte mes_periodo con este? Si pasa, importar uno
     // borraría al otro (el import reemplaza el mes completo).
     function hayColision(cierreISO) {
@@ -198,6 +233,9 @@ const Ciclos = (() => {
         diasHastaCierre,
         progresoCiclo,
         periodoDe,
+        cierreDePeriodo,
+        diaDelCiclo,
+        corteDelCiclo,
         hayColision,
         vencimientoDe,
         formatearFecha,

@@ -268,10 +268,81 @@ const DB = (() => {
     }
 
     // ----------------------------------------------------------------
+    // RITMO DE GASTO — este ciclo contra el anterior a la misma altura
+    //
+    // Compara SÓLO consumo del ciclo (cuota_actual null o 1). Las cuotas
+    // arrastradas son un peso fijo de compras viejas y no dependen de lo
+    // que se gaste hoy: en el resumen de agosto eran el 65% del total y
+    // tapaban por completo la señal.
+    //
+    // El corte es por DÍA DEL CICLO, no por fecha calendario: si hoy es el
+    // día 15 del ciclo, se suman los primeros 15 días de cada uno. Si el
+    // mes elegido ya cerró se comparan los ciclos completos (28 vs 28).
+    //
+    // El mes anterior sale del calendario de ciclos, no de la lista de
+    // meses con datos: si ese ciclo nunca se importó se informa como "sin
+    // datos" en vez de comparar contra cero y cantar un -100%.
+    // ----------------------------------------------------------------
+    async function obtenerRitmo(mesPeriodo) {
+        if (typeof Ciclos === 'undefined') return null;
+
+        const cierre = Ciclos.cierreDePeriodo(mesPeriodo);
+        if (!cierre) return null;
+
+        // Un ciclo es [cierre_previo, cierre), así que el ciclo anterior
+        // cierra exactamente donde arranca este.
+        const cierrePrevio = Ciclos.rangoDe(cierre).desde;
+        const mesAnterior  = Ciclos.periodoDe(Ciclos.rangoDe(cierrePrevio).desde);
+        if (!mesAnterior) return null;
+
+        const dia = Ciclos.diaDelCiclo(cierre);
+        if (dia < 1) return null;               // ciclo futuro: nada que comparar
+
+        const corteActual = Ciclos.corteDelCiclo(cierre,       dia);
+        const cortePrevio = Ciclos.corteDelCiclo(cierrePrevio, dia);
+
+        const { data, error } = await supabase
+            .from('movimientos')
+            .select('mes_periodo, fecha, monto_ars, es_reintegro, cuota_actual')
+            .eq('user_id', userId)
+            .in('mes_periodo', [mesPeriodo, mesAnterior]);
+
+        if (error) throw error;
+
+        // `fecha` es 'YYYY-MM-DD', así que la comparación de strings ordena
+        // igual que la de fechas y evita construir un Date por fila.
+        const sumar = (mes, corte) => data.reduce((acc, m) => {
+            if (m.mes_periodo !== mes) return acc;
+            const ars = m.monto_ars != null ? parseFloat(m.monto_ars) : 0;
+            if (m.es_reintegro || ars < 0) return acc;   // créditos afuera, igual que los KPIs
+            if (m.cuota_actual > 1)        return acc;   // arrastre de ciclos anteriores
+            if (!m.fecha || m.fecha >= corte) return acc; // todavía no pasó ese día del ciclo
+            return acc + ars;
+        }, 0);
+
+        const actual   = sumar(mesPeriodo,  corteActual);
+        const anterior = sumar(mesAnterior, cortePrevio);
+
+        return {
+            mesPeriodo,
+            mesAnterior,
+            hayAnterior: data.some(m => m.mes_periodo === mesAnterior),
+            enCurso:     dia < Ciclos.DIAS_CICLO,
+            dia,
+            diasCiclo:   Ciclos.DIAS_CICLO,
+            actual,
+            anterior,
+            delta: actual - anterior,
+            // Sin base no hay porcentaje: se informa sólo el monto.
+            pct: anterior > 0 ? ((actual - anterior) / anterior) * 100 : null,
+        };
+    }
+
+    // ----------------------------------------------------------------
     // OBTENER TODOS LOS DATOS DEL DASHBOARD en paralelo
     // ----------------------------------------------------------------
     async function obtenerDatosDashboard(mesPeriodo) {
-        const [meses, kpis, distribucion, top10, evolucion, cuotas, extracto, categorias] =
+        const [meses, kpis, distribucion, top10, evolucion, cuotas, extracto, categorias, ritmo] =
             await Promise.all([
                 obtenerMeses(),
                 obtenerKPIs(mesPeriodo),
@@ -281,9 +352,10 @@ const DB = (() => {
                 obtenerCuotas(mesPeriodo),
                 obtenerExtracto(mesPeriodo),
                 obtenerCategorias(),
+                obtenerRitmo(mesPeriodo),
             ]);
 
-        return { meses, kpis, distribucion, top10, evolucion, cuotas, extracto, categorias };
+        return { meses, kpis, distribucion, top10, evolucion, cuotas, extracto, categorias, ritmo };
     }
 
     // ----------------------------------------------------------------

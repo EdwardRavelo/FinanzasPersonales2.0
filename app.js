@@ -257,6 +257,7 @@ function dibujarDashboard(datos) {
     (datos.categorias || []).forEach(c => { colorMap[c.nombre] = c.color; });
 
     dibujarKPIs(datos.kpis);
+    dibujarRitmo(datos.ritmo);
     dibujarDonut(datos.distribucion, colorMap);
     dibujarCatTop(datos.distribucion, colorMap);
     dibujarBarras(datos.top10);
@@ -321,6 +322,55 @@ function dibujarCierre() {
     document.getElementById('cierre-barra-track').setAttribute('aria-valuenow', pct);
 
     panel.classList.toggle('es-inminente', dias <= 3);
+}
+
+// ----------------------------------------------------------------
+// PANEL DE RITMO — ¿estoy gastando más o menos que el mes pasado?
+//
+// La comparación es a la MISMA ALTURA del ciclo (mismo día), no mes
+// calendario contra mes calendario, y sólo sobre consumo del ciclo:
+// ver obtenerRitmo() en db.js. A diferencia del panel de cierre, este
+// sí depende del mes seleccionado, así que se dibuja desde
+// dibujarDashboard() y cambia al cambiar de mes en el selector.
+// ----------------------------------------------------------------
+function dibujarRitmo(ritmo) {
+    const panel = document.getElementById('panel-ritmo');
+    if (!panel) return;
+
+    // Sin el ciclo anterior importado no hay con qué comparar: se esconde
+    // el panel en lugar de cantar un −100% contra un mes vacío.
+    if (!ritmo || !ritmo.hayAnterior) {
+        panel.style.display = 'none';
+        return;
+    }
+    panel.style.display = '';
+
+    const menos = ritmo.delta < 0;
+    panel.classList.toggle('es-menos',  menos);
+    panel.classList.toggle('es-mas',   !menos);
+
+    // pct viene null cuando el ciclo anterior no tuvo consumo en el tramo:
+    // sería una división por cero, así que se informa sólo el monto.
+    document.getElementById('ritmo-pct').textContent =
+        ritmo.pct === null ? (menos ? '▼' : '▲')
+                           : `${menos ? '▼' : '▲'} ${formatPct(Math.abs(ritmo.pct))}`;
+
+    document.getElementById('ritmo-pct-sub').textContent =
+        menos ? 'menos que el mes pasado' : 'más que el mes pasado';
+
+    document.getElementById('ritmo-monto').textContent =
+        `${formatARS(Math.abs(ritmo.delta))} ${menos ? 'menos' : 'más'}`;
+
+    // El ciclo en curso va en presente ("llevás"); uno ya cerrado, en pasado.
+    document.getElementById('ritmo-detalle').textContent = ritmo.enCurso
+        ? `Llevás ${formatARS(ritmo.actual)} en este ciclo, contra ` +
+          `${formatARS(ritmo.anterior)} de ${formatearMes(ritmo.mesAnterior)} en el mismo tramo.`
+        : `Gastaste ${formatARS(ritmo.actual)} en ${formatearMes(ritmo.mesPeriodo)}, contra ` +
+          `${formatARS(ritmo.anterior)} de ${formatearMes(ritmo.mesAnterior)}, ciclo completo.`;
+
+    document.getElementById('ritmo-rango').textContent = ritmo.enCurso
+        ? `día ${ritmo.dia} de ${ritmo.diasCiclo}`
+        : `ciclo completo · ${ritmo.diasCiclo} días`;
 }
 
 // ----------------------------------------------------------------
@@ -1357,6 +1407,14 @@ function formatARS(valor, abreviado = false) {
         return `$${n}`;
     }
     return '$ ' + n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+// 23.42 → '23,4%'. Arriba de 100% la decimal es ruido, se recorta.
+function formatPct(valor) {
+    const dec = Math.abs(valor) >= 100 ? 0 : 1;
+    return valor.toLocaleString('es-AR', {
+        minimumFractionDigits: dec, maximumFractionDigits: dec,
+    }) + '%';
 }
 
 function formatearMes(periodo) {
