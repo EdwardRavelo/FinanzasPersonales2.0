@@ -268,7 +268,7 @@ const DB = (() => {
     }
 
     // ----------------------------------------------------------------
-    // RITMO DE GASTO — este ciclo contra el anterior a la misma altura
+    // RITMO DE GASTO — este ciclo contra otro, a la misma altura
     //
     // Compara SÓLO consumo del ciclo (cuota_actual null o 1). Las cuotas
     // arrastradas son un peso fijo de compras viejas y no dependen de lo
@@ -279,35 +279,61 @@ const DB = (() => {
     // día 15 del ciclo, se suman los primeros 15 días de cada uno. Si el
     // mes elegido ya cerró se comparan los ciclos completos (28 vs 28).
     //
-    // El mes anterior sale del calendario de ciclos, no de la lista de
-    // meses con datos: si ese ciclo nunca se importó se informa como "sin
-    // datos" en vez de comparar contra cero y cantar un -100%.
+    // Por defecto la base es el ciclo inmediatamente anterior, sacado del
+    // calendario y no de la lista de meses con datos; si ese ciclo nunca se
+    // importó se cae al mes con datos más reciente en vez de comparar
+    // contra cero y cantar un -100%. Pasando `mesComparacion` se compara
+    // contra cualquier otro mes cargado, siempre al mismo día del ciclo.
     // ----------------------------------------------------------------
-    async function obtenerRitmo(mesPeriodo) {
+    async function obtenerRitmo(mesPeriodo, mesComparacion) {
         if (typeof Ciclos === 'undefined') return null;
 
         const cierre = Ciclos.cierreDePeriodo(mesPeriodo);
         if (!cierre) return null;
 
-        // Un ciclo es [cierre_previo, cierre), así que el ciclo anterior
-        // cierra exactamente donde arranca este.
-        const cierrePrevio = Ciclos.rangoDe(cierre).desde;
-        const mesAnterior  = Ciclos.periodoDe(Ciclos.rangoDe(cierrePrevio).desde);
-        if (!mesAnterior) return null;
+        // Sin mes elegido se compara contra el ciclo inmediatamente anterior:
+        // un ciclo es [cierre_previo, cierre), así que el anterior cierra
+        // exactamente donde arranca este. Con mesComparacion se apunta a
+        // cualquier otro mes ya cargado (julio contra septiembre, etc.).
+        const cierreBase = mesComparacion
+            ? Ciclos.cierreDePeriodo(mesComparacion)
+            : Ciclos.rangoDe(cierre).desde;
+        if (!cierreBase) return null;
+
+        const mesBase = Ciclos.periodoDe(Ciclos.rangoDe(cierreBase).desde);
+        if (!mesBase || mesBase === mesPeriodo) return null;
 
         const dia = Ciclos.diaDelCiclo(cierre);
         if (dia < 1) return null;               // ciclo futuro: nada que comparar
 
-        const corteActual = Ciclos.corteDelCiclo(cierre,       dia);
-        const cortePrevio = Ciclos.corteDelCiclo(cierrePrevio, dia);
+        const corteActual = Ciclos.corteDelCiclo(cierre,     dia);
+        const corteBase   = Ciclos.corteDelCiclo(cierreBase, dia);
 
         const { data, error } = await supabase
             .from('movimientos')
             .select('mes_periodo, fecha, monto_ars, es_reintegro, cuota_actual')
             .eq('user_id', userId)
-            .in('mes_periodo', [mesPeriodo, mesAnterior]);
+            .in('mes_periodo', [mesPeriodo, mesBase]);
 
         if (error) throw error;
+
+        // Si el ciclo anterior nunca se importó, el panel desaparecería justo
+        // cuando todavía hay con qué comparar. Se cae al mes con datos más
+        // reciente anterior a este. Sólo se hace en el caso automático, así
+        // que no puede recursar más de una vez.
+        if (!mesComparacion && !data.some(m => m.mes_periodo === mesBase)) {
+            const { data: previos } = await supabase
+                .from('movimientos')
+                .select('mes_periodo')
+                .eq('user_id', userId)
+                .lt('mes_periodo', mesPeriodo)
+                .order('mes_periodo', { ascending: false })
+                .limit(1);
+
+            if (previos && previos.length) {
+                return obtenerRitmo(mesPeriodo, previos[0].mes_periodo);
+            }
+        }
 
         // `fecha` es 'YYYY-MM-DD', así que la comparación de strings ordena
         // igual que la de fechas y evita construir un Date por fila.
@@ -320,14 +346,14 @@ const DB = (() => {
             return acc + ars;
         }, 0);
 
-        const actual   = sumar(mesPeriodo,  corteActual);
-        const anterior = sumar(mesAnterior, cortePrevio);
+        const actual   = sumar(mesPeriodo, corteActual);
+        const anterior = sumar(mesBase,    corteBase);
 
         return {
             mesPeriodo,
-            mesAnterior,
-            hayAnterior: data.some(m => m.mes_periodo === mesAnterior),
-            enCurso:     dia < Ciclos.DIAS_CICLO,
+            mesComparacion: mesBase,
+            hayComparacion: data.some(m => m.mes_periodo === mesBase),
+            enCurso:        dia < Ciclos.DIAS_CICLO,
             dia,
             diasCiclo:   Ciclos.DIAS_CICLO,
             actual,
@@ -617,6 +643,9 @@ const DB = (() => {
         obtenerMeses,
         obtenerDatosDashboard,
         obtenerExtracto,
+        // Se expone aparte del payload del dashboard: al cambiar el mes de
+        // comparación sólo hace falta recalcular este panel.
+        obtenerRitmo,
         // Importación
         importarMovimientos,
         // Clasificaciones

@@ -7,6 +7,9 @@
 // ESTADO GLOBAL
 // ----------------------------------------------------------------
 let mesActivo        = null;
+// Mes contra el que compara el panel de ritmo. null = automático (el ciclo
+// anterior, o el mes con datos más reciente si ese no se importó).
+let mesComparacion   = null;
 let chartTorta       = null;
 let chartTop         = null;
 let chartEvo         = null;
@@ -235,6 +238,9 @@ async function arrancarDashboard() {
 
 async function cargarMes(mes) {
     mesActivo = mes;
+    // El mes de comparación vuelve a automático: el elegido a mano puede ser
+    // el mes que se acaba de seleccionar, o quedar sin sentido respecto de él.
+    mesComparacion = null;
     mostrarSkeletons();
 
     try {
@@ -257,7 +263,7 @@ function dibujarDashboard(datos) {
     (datos.categorias || []).forEach(c => { colorMap[c.nombre] = c.color; });
 
     dibujarKPIs(datos.kpis);
-    dibujarRitmo(datos.ritmo);
+    dibujarRitmo(datos.ritmo, datos.meses);
     dibujarDonut(datos.distribucion, colorMap);
     dibujarCatTop(datos.distribucion, colorMap);
     dibujarBarras(datos.top10);
@@ -333,17 +339,19 @@ function dibujarCierre() {
 // sí depende del mes seleccionado, así que se dibuja desde
 // dibujarDashboard() y cambia al cambiar de mes en el selector.
 // ----------------------------------------------------------------
-function dibujarRitmo(ritmo) {
+function dibujarRitmo(ritmo, meses = []) {
     const panel = document.getElementById('panel-ritmo');
     if (!panel) return;
 
-    // Sin el ciclo anterior importado no hay con qué comparar: se esconde
+    // Sin ningún mes anterior importado no hay con qué comparar: se esconde
     // el panel en lugar de cantar un −100% contra un mes vacío.
-    if (!ritmo || !ritmo.hayAnterior) {
+    if (!ritmo || !ritmo.hayComparacion) {
         panel.style.display = 'none';
         return;
     }
     panel.style.display = '';
+
+    poblarSelectorRitmo(meses, ritmo.mesComparacion);
 
     const menos = ritmo.delta < 0;
     panel.classList.toggle('es-menos',  menos);
@@ -355,8 +363,10 @@ function dibujarRitmo(ritmo) {
         ritmo.pct === null ? (menos ? '▼' : '▲')
                            : `${menos ? '▼' : '▲'} ${formatPct(Math.abs(ritmo.pct))}`;
 
+    // Se nombra el mes en vez de decir "el mes pasado": con el selector la
+    // base puede ser cualquiera, y quedaría mintiendo.
     document.getElementById('ritmo-pct-sub').textContent =
-        menos ? 'menos que el mes pasado' : 'más que el mes pasado';
+        `${menos ? 'menos' : 'más'} que ${formatearMes(ritmo.mesComparacion)}`;
 
     document.getElementById('ritmo-monto').textContent =
         `${formatARS(Math.abs(ritmo.delta))} ${menos ? 'menos' : 'más'}`;
@@ -364,13 +374,51 @@ function dibujarRitmo(ritmo) {
     // El ciclo en curso va en presente ("llevás"); uno ya cerrado, en pasado.
     document.getElementById('ritmo-detalle').textContent = ritmo.enCurso
         ? `Llevás ${formatARS(ritmo.actual)} en este ciclo, contra ` +
-          `${formatARS(ritmo.anterior)} de ${formatearMes(ritmo.mesAnterior)} en el mismo tramo.`
+          `${formatARS(ritmo.anterior)} de ${formatearMes(ritmo.mesComparacion)} en el mismo tramo.`
         : `Gastaste ${formatARS(ritmo.actual)} en ${formatearMes(ritmo.mesPeriodo)}, contra ` +
-          `${formatARS(ritmo.anterior)} de ${formatearMes(ritmo.mesAnterior)}, ciclo completo.`;
+          `${formatARS(ritmo.anterior)} de ${formatearMes(ritmo.mesComparacion)}, ciclo completo.`;
 
     document.getElementById('ritmo-rango').textContent = ritmo.enCurso
         ? `día ${ritmo.dia} de ${ritmo.diasCiclo}`
         : `ciclo completo · ${ritmo.diasCiclo} días`;
+}
+
+// Llena el selector con los meses que tienen datos, salvo el que se está
+// mirando. Se repuebla en cada dibujo porque la lista cambia al importar.
+function poblarSelectorRitmo(meses, mesElegido) {
+    const sel = document.getElementById('ritmo-vs');
+    if (!sel) return;
+
+    const opciones = (meses || []).filter(m => m !== mesActivo);
+    sel.innerHTML = '';
+
+    opciones.forEach(m => {
+        const op = document.createElement('option');
+        op.value = m;
+        // El mes que resolvió el modo automático se marca, así se ve que
+        // es el ciclo anterior y no una elección del usuario.
+        op.textContent = `vs ${formatearMes(m)}`;
+        sel.appendChild(op);
+    });
+
+    sel.value = mesElegido || '';
+    sel.disabled = opciones.length < 2;
+}
+
+// Cambiar el mes de comparación sólo recalcula este panel: el resto del
+// dashboard depende del mes activo, que no se movió.
+async function cambiarMesComparacion(mes) {
+    mesComparacion = mes || null;
+    if (!mesActivo) return;
+
+    try {
+        const ritmo = await DB.obtenerRitmo(mesActivo, mesComparacion);
+        dibujarRitmo(ritmo, datosActuales?.meses || []);
+        if (datosActuales) datosActuales.ritmo = ritmo;
+    } catch (err) {
+        console.error('Error al comparar meses:', err);
+        mostrarError('No se pudo comparar contra ese mes.');
+    }
 }
 
 // ----------------------------------------------------------------
@@ -1019,6 +1067,11 @@ function bindEventos() {
     // Selector de mes
     document.getElementById('selector-mes')?.addEventListener('change', (e) => {
         cargarMes(e.target.value);
+    });
+
+    // Selector del mes contra el que compara el panel de ritmo
+    document.getElementById('ritmo-vs')?.addEventListener('change', (e) => {
+        cambiarMesComparacion(e.target.value);
     });
 
     // Botón subir archivo

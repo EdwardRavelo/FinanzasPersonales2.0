@@ -636,6 +636,23 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
   font-variant-numeric: tabular-nums;
 }
 
+/* Selector del mes contra el que se compara. Va al final de la fila del
+   encabezado; con flex-wrap cae solo abajo cuando no entra. */
+.ritmo-select {
+  margin-left: auto;
+  padding: 7px 14px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  border-radius: var(--r-pill);
+  background-color: var(--input-bg);
+  color: var(--text-muted);
+  border: 1px solid var(--glass-border);
+  letter-spacing: 0.02em;
+  max-width: 190px;
+}
+.ritmo-select:hover, .ritmo-select:focus { border-color: var(--gold); box-shadow: none; }
+.ritmo-select option { background-color: var(--bg-surface); color: var(--text-main); }
+
 .ritmo-detalle {
   font-size: 13px;
   line-height: 1.55;
