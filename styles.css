@@ -1012,6 +1012,72 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
 .modal-top10-caja  { width: 90%; max-width: 700px; height: 520px; display: flex; flex-direction: column; overflow: hidden; }
 .modal-top10-chart { flex: 1; position: relative; min-height: 0; }
 .modal-cuotas-caja { width: 90%; max-width: 560px; max-height: 72vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ----------------------------------------------------------------
+   MODAL DE EVOLUCIÓN — gráfico grande + su gemelo en tabla
+   ---------------------------------------------------------------- */
+.modal-evo-caja {
+  width: 94%; max-width: 880px; max-height: 86vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* El alto incluye la banda del eje x: si se recorta, la tarjeta termina
+   con un scroll vertical diminuto adentro del gráfico. */
+.modal-evo-chart {
+  position: relative;
+  height: 340px;
+  flex-shrink: 0;
+  margin-bottom: 4px;
+}
+
+.evo-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.evo-tab {
+  padding: 8px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.25s var(--ease), border-color 0.25s var(--ease),
+              background-color 0.25s var(--ease);
+}
+.evo-tab:hover { color: var(--text-main); border-color: var(--gold); }
+.evo-tab[aria-selected="true"] {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--bg-base);
+  font-weight: 500;
+}
+
+.evo-nota {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 68ch;
+}
+
+.evo-tabla-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 12px;
+}
+
+.evo-tabla { width: 100%; }
+.evo-tabla .num { text-align: right; font-variant-numeric: tabular-nums; }
+.evo-fila-activa td { color: var(--gold); font-weight: 500; }
 .modal-extracto-caja { width: 95%; max-width: 1200px; height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
 .modal-extracto-caja .modal-header { flex-wrap: wrap; gap: 14px; margin-bottom: 18px; }
 .modal-caja-import { max-width: 460px; }
@@ -1293,6 +1359,8 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
     border-radius: var(--r-xl) var(--r-xl) 0 0; padding: 26px 18px 32px;
   }
   .modal-extracto-caja, .modal-top10-caja, .modal-cuotas-caja { height: 90vh; max-height: 90vh; }
+  .modal-evo-caja { height: 90vh; max-height: 90vh; }
+  .modal-evo-chart { height: 260px; }
 
   .banner-migracion { flex-direction: column; text-align: center; gap: 14px; padding: 20px; }
 

@@ -33,6 +33,23 @@ let timerCierre = null;
 // ----------------------------------------------------------------
 // PALETA Y CONFIG GLOBAL DE CHART.JS
 // ----------------------------------------------------------------
+// SERIES: ocho slots categóricos en orden fijo, validados con
+// scripts/validate_palette.js de la skill dataviz contra LAS SUPERFICIES DE
+// ESTE PROYECTO (#080c12 y #e8eaee), no contra las de referencia. Pasan las
+// seis checks en ambos modos. El orden es el mecanismo de seguridad para
+// daltonismo: no se reordena ni se agregan hues.
+//
+// La paleta anterior (14 colores cicladores) fallaba tres checks: el verde y
+// el cian eran indistinguibles hasta con visión normal (ΔE 9,4 sobre un piso
+// de 15), y el oro caía bajo el piso de croma — leía gris, o sea no hacía
+// trabajo de identidad. El oro sigue siendo el acento de la interfaz y el
+// resalte del mes activo, pero ya no es un slot de serie.
+//
+// Novena categoría en adelante: se pliega a "Otros" en gris. Nunca se genera
+// un color nuevo — bajo daltonismo sería idéntico a alguno de los ocho.
+const SERIES_DARK  = ['#3987e5','#d95926','#199e70','#c98500','#d55181','#008300','#9085e9','#e66767'];
+const SERIES_LIGHT = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'];
+
 let PALETTE = {
     gold:      '#c9a96e',
     goldDim:   'rgba(201,169,110,0.15)',
@@ -41,12 +58,15 @@ let PALETTE = {
     textMuted: '#5e7080',
     textMain:  '#eef2f7',
     border:    'rgba(255,255,255,0.06)',
-    donut: [
-        '#c9a96e','#4fc3c3','#5ecf8c','#a78bfa',
-        '#fb7185','#fbbf24','#60a5fa','#34d399',
-        '#f472b6','#38bdf8','#a3e635','#fb923c',
-        '#e879f9','#94a3b8',
-    ],
+    // Superficie sobre la que se dibuja: es el color de los separadores de
+    // 2px entre marcas. Antes estaba hardcodeado en #080c12, así que en tema
+    // claro el donut dibujaba aros negros.
+    surface:   '#080c12',
+    series:    SERIES_DARK,
+    otros:     '#8a8f98',
+    // Polaridad para el ritmo: gastar menos es bueno.
+    bueno:     '#0ca30c',
+    malo:      '#d03b3b',
 };
 
 const PALETTES = {
@@ -57,6 +77,11 @@ const PALETTES = {
         border: 'rgba(255,255,255,0.06)',
         tooltipBg: 'rgba(8,12,18,0.95)',
         tooltipBorder: 'rgba(201,169,110,0.3)',
+        surface: '#080c12',
+        series:  SERIES_DARK,
+        otros:   '#8a8f98',
+        bueno:   '#0ca30c',
+        malo:    '#d03b3b',
     },
     light: {
         gold: '#a07028', goldDim: 'rgba(160,112,40,0.12)',
@@ -65,6 +90,11 @@ const PALETTES = {
         border: 'rgba(0,0,0,0.07)',
         tooltipBg: 'rgba(26,35,50,0.95)',
         tooltipBorder: 'rgba(160,112,40,0.3)',
+        surface: '#e8eaee',
+        series:  SERIES_LIGHT,
+        otros:   '#6b7280',
+        bueno:   '#0a7a0a',
+        malo:    '#b8323c',
     },
 };
 
@@ -77,6 +107,11 @@ function aplicarTema(tema) {
     PALETTE.textMuted = p.textMuted;
     PALETTE.textMain  = p.textMain;
     PALETTE.border    = p.border;
+    PALETTE.surface   = p.surface;
+    PALETTE.series    = p.series;
+    PALETTE.otros     = p.otros;
+    PALETTE.bueno     = p.bueno;
+    PALETTE.malo      = p.malo;
 
     Chart.defaults.color                           = p.textMuted;
     Chart.defaults.plugins.tooltip.backgroundColor = p.tooltipBg;
@@ -86,6 +121,63 @@ function aplicarTema(tema) {
 
     const btn = document.getElementById('btn-tema');
     if (btn) btn.textContent = tema === 'light' ? '☾' : '☀';
+}
+
+// ----------------------------------------------------------------
+// MAPA DE COLOR POR CATEGORÍA — estable, no por ranking del mes
+//
+// El color sigue a la entidad, nunca a su puesto. Si los slots se asignaran
+// por el ranking del mes elegido, cambiar de mes repintaría las categorías
+// que sobreviven y el que aprendió "Supermercado es azul" quedaría colgado.
+// El orden sale del gasto de TODA la historia, que no depende del mes en
+// pantalla, así que filtrar no repinta nada.
+//
+// Hasta ocho categorías toman slot propio; de la novena en adelante se
+// pliegan a "Otros" en gris. Nunca se genera un color nuevo: bajo daltonismo
+// sería indistinguible de alguno de los ocho.
+// ----------------------------------------------------------------
+const CAT_OTROS = 'Otros';
+
+let mapaSeries        = {};   // nombre de categoría → color de slot
+let rankingCategorias = [];   // orden por gasto histórico, el que fija los slots
+
+function construirMapaSeries(evolucion) {
+    const { periodos = [], datos = {} } = evolucion || {};
+
+    const totales = {};
+    periodos.forEach(p => {
+        Object.entries(datos[p] || {}).forEach(([cat, monto]) => {
+            totales[cat] = (totales[cat] || 0) + monto;
+        });
+    });
+
+    rankingCategorias = Object.keys(totales).sort((a, b) => totales[b] - totales[a]);
+
+    mapaSeries = {};
+    rankingCategorias.forEach((cat, i) => {
+        mapaSeries[cat] = i < PALETTE.series.length ? PALETTE.series[i] : PALETTE.otros;
+    });
+    mapaSeries[CAT_OTROS] = PALETTE.otros;
+}
+
+function colorCategoria(nombre) {
+    return mapaSeries[nombre] || PALETTE.otros;
+}
+
+// Pliega una distribución a `tope` slots + "Otros", respetando el ranking
+// histórico para que el color de cada categoría no dependa del mes.
+function plegarCategorias(items, tope) {
+    if (items.length <= tope) return items;
+
+    const ordenados = [...items].sort((a, b) => b.total - a.total);
+    const cabeza    = ordenados.slice(0, tope - 1);
+    const cola      = ordenados.slice(tope - 1);
+
+    return [...cabeza, {
+        categoria: CAT_OTROS,
+        total:     cola.reduce((s, d) => s + d.total, 0),
+        cuantas:   cola.length,
+    }];
 }
 
 function toggleTema() {
@@ -258,16 +350,19 @@ async function cargarMes(mes) {
 function dibujarDashboard(datos) {
     datosActuales = datos;
 
-    // Mapa nombre→color compartido por todos los gráficos para coherencia visual
-    const colorMap = {};
-    (datos.categorias || []).forEach(c => { colorMap[c.nombre] = c.color; });
+    // Un solo mapa de color para todo el dashboard: donut, evolución, panel
+    // de categoría top y los puntos del extracto. Antes había tres fuentes
+    // distintas (las categorías del usuario, PALETTE.donut y una lista de
+    // fallbacks dentro de dibujarEvolucion), así que la misma categoría podía
+    // salir de un color en el donut y de otro en la evolución.
+    construirMapaSeries(datos.evolucion);
 
     dibujarKPIs(datos.kpis);
     dibujarRitmo(datos.ritmo, datos.meses);
-    dibujarDonut(datos.distribucion, colorMap);
-    dibujarCatTop(datos.distribucion, colorMap);
+    dibujarDonut(datos.distribucion);
+    dibujarCatTop(datos.distribucion);
     dibujarBarras(datos.top10);
-    dibujarEvolucion(datos.evolucion, datos.categorias);
+    dibujarEvolucion(datos.evolucion);
     dibujarCuotas(datos.cuotas);
     dibujarExtracto(datos.extracto);
 }
@@ -461,13 +556,15 @@ function dibujarKPIs(kpis) {
 // ----------------------------------------------------------------
 // GRÁFICO DONUT — Distribución por categoría
 // ----------------------------------------------------------------
-function dibujarDonut(distribucion, colorMap = {}) {
-    const labels = distribucion.map(d => d.categoria);
-    const values = distribucion.map(d => d.total);
+function dibujarDonut(distribucion) {
+    // Parte-sobre-el-total se lee de un vistazo hasta ~6 gajos; más allá los
+    // adyacentes se confunden y el gráfico deja de responder nada. El resto
+    // se pliega a "Otros", que el tooltip desglosa en cuántas categorías son.
+    const items  = plegarCategorias(distribucion || [], 6);
+    const labels = items.map(d => d.categoria);
+    const values = items.map(d => d.total);
     const total  = values.reduce((a, b) => a + b, 0);
-
-    // Colores coherentes con el resto del dashboard
-    const colores = labels.map(l => colorMap[l] || PALETTE.donut[labels.indexOf(l)] || '#94a3b8');
+    const colores = labels.map(colorCategoria);
 
     if (chartTorta) chartTorta.destroy();
 
@@ -478,7 +575,10 @@ function dibujarDonut(distribucion, colorMap = {}) {
             const cx = left + width  / 2;
             const cy = top  + height / 2;
             ctx.save();
-            ctx.font         = `700 16px 'Playfair Display', serif`;
+            // Misma sans que el resto: una serif acá lee como decoración
+            // fuera de marca, y además el número grande va con cifras
+            // proporcionales (tabular-nums afloja los dígitos a este tamaño).
+            ctx.font         = `600 17px 'Space Grotesk', system-ui, sans-serif`;
             ctx.fillStyle    = PALETTE.textMain;
             ctx.textAlign    = 'center';
             ctx.textBaseline = 'middle';
@@ -495,12 +595,17 @@ function dibujarDonut(distribucion, colorMap = {}) {
         data: {
             labels,
             datasets: [{
-                data:             values,
-                backgroundColor:  colores.map(c => c + 'bb'),   // ~73% — melt base
-                hoverBackgroundColor: colores.map(c => c + 'ee'), // ~93% — hover
+                data:                 values,
+                backgroundColor:      colores,
+                hoverBackgroundColor: colores,
+                // El separador entre gajos es la superficie, no un borde: un
+                // trazo alrededor de la marca agrega tinta que no es dato.
+                // Iba hardcodeado en #080c12, así que en tema claro el donut
+                // dibujaba aros negros; ahora sigue al tema.
                 borderWidth:      2,
-                borderColor:      '#080c12',
-                hoverBorderWidth: 0,
+                borderColor:      PALETTE.surface,
+                hoverBorderWidth: 2,
+                hoverBorderColor: PALETTE.surface,
                 hoverOffset:      10,
                 spacing:          2,
             }]
@@ -516,13 +621,37 @@ function dibujarDonut(distribucion, colorMap = {}) {
                     labels: {
                         boxWidth: 8, boxHeight: 8, borderRadius: 2,
                         usePointStyle: true, pointStyle: 'rect',
-                        padding: 12, color: PALETTE.textMuted,
+                        padding: 12,
+                        // El texto va con tinta, nunca con el color de la
+                        // serie: el swatch al lado es el que da identidad.
+                        color: PALETTE.textMuted,
                         font: { size: 11, family: "'DM Mono',monospace" },
+                        // En tema claro cuatro de los ocho slots quedan bajo
+                        // 3:1 contra la superficie. La skill lo permite sólo
+                        // si el valor se puede leer por otro canal: la leyenda
+                        // lleva el monto, así que nada depende del color.
+                        generateLabels(chart) {
+                            const ds = chart.data.datasets[0];
+                            return chart.data.labels.map((l, i) => ({
+                                text: `${l}  ${formatARS(ds.data[i], true)}`,
+                                fillStyle: ds.backgroundColor[i],
+                                strokeStyle: ds.backgroundColor[i],
+                                lineWidth: 0,
+                                index: i,
+                            }));
+                        },
                     }
                 },
                 tooltip: {
                     callbacks: {
-                        label: ctx => ` ${ctx.label}: ${formatARS(ctx.raw)}`
+                        label: ctx => {
+                            const pct = total > 0 ? (ctx.raw / total) * 100 : 0;
+                            return ` ${ctx.label}: ${formatARS(ctx.raw)} (${formatPct(pct)})`;
+                        },
+                        afterLabel: ctx => {
+                            const it = items[ctx.dataIndex];
+                            return it?.cuantas ? `  ${it.cuantas} categorías agrupadas` : '';
+                        },
                     }
                 }
             }
@@ -535,7 +664,7 @@ function dibujarDonut(distribucion, colorMap = {}) {
 // ----------------------------------------------------------------
 // CATEGORÍA TOP DEL MES
 // ----------------------------------------------------------------
-function dibujarCatTop(distribucion, colorMap) {
+function dibujarCatTop(distribucion) {
     const dotEl    = document.getElementById('cat-top-dot');
     const nombreEl = document.getElementById('cat-top-nombre');
     const montoEl  = document.getElementById('cat-top-monto');
@@ -553,7 +682,7 @@ function dibujarCatTop(distribucion, colorMap) {
     const top    = sorted[0];
     const total  = distribucion.reduce((s, d) => s + d.total, 0);
     const pct    = total > 0 ? Math.round((top.total / total) * 100) : 0;
-    const color  = colorMap[top.categoria] || '#94a3b8';
+    const color  = colorCategoria(top.categoria);
 
     dotEl.style.background   = color;
     nombreEl.textContent     = top.categoria;
@@ -652,51 +781,56 @@ function dibujarBarrasModal() {
 // ----------------------------------------------------------------
 // GRÁFICO BARRAS APILADAS — Evolución histórica por categoría
 // ----------------------------------------------------------------
-function dibujarEvolucion(evolucion, categorias = []) {
-    if (chartEvo) chartEvo.destroy();
-
-    const { periodos = [], datos = {} } = evolucion;
-    if (!periodos.length) return;
+// Arma labels, datasets y el acceso a valores del stack. Lo usan el panel y
+// el modal, así que la composición de la serie se define una sola vez.
+function datosEvolucion(evolucion, tope = PALETTE.series.length) {
+    const { periodos = [], datos = {} } = evolucion || {};
+    if (!periodos.length) return null;
 
     const labels = periodos.map(p => formatearMes(p));
 
-    // Mapa nombre → color desde categorías del usuario
-    const colorMap = {};
-    (categorias || []).forEach(c => { colorMap[c.nombre] = c.color; });
+    // `tope - 1` categorías con slot propio + "Otros". El orden sale del
+    // ranking histórico (construirMapaSeries), no del mes en pantalla, así
+    // que las barras no se repintan al cambiar de mes; las más grandes van
+    // abajo. El panel usa un tope más bajo que el modal: ocho segmentos con
+    // sus huecos, en 130px de alto, leen como código de barras.
+    const conDatos     = rankingCategorias.filter(c => periodos.some(p => datos[p]?.[c]));
+    const conSlot      = conDatos.slice(0, tope - 1);
+    const agrupadas    = conDatos.slice(tope - 1);
+    const catOrdenadas = agrupadas.length ? [...conSlot, CAT_OTROS] : conSlot;
 
-    // Recopilar todas las categorías que aparecen en los datos
-    const catSet = new Set();
-    periodos.forEach(p => { Object.keys(datos[p] || {}).forEach(c => catSet.add(c)); });
-
-    // Ordenar por gasto total descendente (las más grandes quedan abajo en el stack)
-    const catOrdenadas = [...catSet].sort((a, b) => {
-        const totalA = periodos.reduce((s, p) => s + (datos[p]?.[a] || 0), 0);
-        const totalB = periodos.reduce((s, p) => s + (datos[p]?.[b] || 0), 0);
-        return totalB - totalA;
-    });
-
-    const fallbacks = ['#6366f1','#f59e0b','#06b6d4','#ec4899','#84cc16',
-                       '#f97316','#8b5cf6','#10b981','#ef4444','#a78bfa'];
-    let fi = 0;
-    const getColor = nombre => colorMap[nombre] || fallbacks[fi++ % fallbacks.length];
+    const valorDe = (p, cat) => cat === CAT_OTROS
+        ? agrupadas.reduce((s, c) => s + (datos[p]?.[c] || 0), 0)
+        : (datos[p]?.[cat] || 0);
 
     const datasets = catOrdenadas.map((cat, idx) => {
-        const color = getColor(cat);
+        const color = colorCategoria(cat);
         const isTop = idx === catOrdenadas.length - 1;
-        const isBot = idx === 0;
         return {
             label:           cat,
-            data:            periodos.map(p => datos[p]?.[cat] || 0),
-            backgroundColor: color + '99',
-            borderColor:     color + 'cc',
-            borderWidth:     { top: 1, right: 0, bottom: 0, left: 0 },
+            data:            periodos.map(p => valorDe(p, cat)),
+            backgroundColor: color,
+            // El separador entre segmentos es un hueco de 2px del color de la
+            // superficie, no un borde alrededor de la marca: un trazo suma
+            // tinta que no es dato. Mismo ancho en todo el stack.
+            borderColor:     PALETTE.surface,
+            borderWidth:     { top: 2, right: 0, bottom: 0, left: 0 },
             borderSkipped:   false,
-            borderRadius:    isTop && isBot ? { topLeft: 4, topRight: 4, bottomLeft: 4, bottomRight: 4 }
-                : isTop  ? { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }
-                : isBot  ? { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 }
-                : 0,
+            borderRadius:    isTop ? { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 } : 0,
+            // Marca fina: la barra nunca llena la banda, el sobrante es aire.
+            maxBarThickness: 24,
         };
     });
+
+    return { labels, datasets, periodos, catOrdenadas, valorDe };
+}
+
+function dibujarEvolucion(evolucion) {
+    if (chartEvo) chartEvo.destroy();
+
+    const d = datosEvolucion(evolucion, 5);   // 4 categorías + "Otros"
+    if (!d) return;
+    const { labels, datasets, periodos, catOrdenadas, valorDe } = d;
 
     const ctx = document.getElementById('grafico-evolucion').getContext('2d');
     chartEvo = new Chart(ctx, {
@@ -748,7 +882,7 @@ function dibujarEvolucion(evolucion, categorias = []) {
                         footer:     items => {
                             const idx = items[0]?.dataIndex;
                             if (idx === undefined) return '';
-                            const total = catOrdenadas.reduce((s, cat) => s + (datos[periodos[idx]]?.[cat] || 0), 0);
+                            const total = catOrdenadas.reduce((s, cat) => s + valorDe(periodos[idx], cat), 0);
                             return `Total  ${formatARS(total)}`;
                         },
                     },
@@ -777,6 +911,260 @@ function dibujarEvolucion(evolucion, categorias = []) {
         },
         plugins: [],
     });
+}
+
+// ----------------------------------------------------------------
+// MODAL DE EVOLUCIÓN — dos vistas, nunca mezcladas
+//
+// "Por categoría" es el stack de siempre, en grande. "Ritmo" responde otra
+// pregunta: cuánto llevaba cada ciclo A LA MISMA ALTURA que el actual. Son
+// magnitudes distintas (total cerrado vs. parcial comparable), así que van
+// en vistas separadas y no en dos ejes del mismo gráfico — un doble eje
+// inventa una relación que los datos no tienen.
+// ----------------------------------------------------------------
+let chartEvoModal  = null;
+let vistaEvolucion = 'categoria';
+let ritmoHistorico = null;   // cache; se pide al abrir el modal, no en cada carga
+
+function abrirEvolucion() {
+    const modal = document.getElementById('modal-evolucion');
+    if (!modal || !datosActuales) return;
+    modal.style.display = 'flex';
+    renderVistaEvolucion();
+}
+
+function cerrarEvolucion() {
+    const modal = document.getElementById('modal-evolucion');
+    if (modal) modal.style.display = 'none';
+    if (chartEvoModal) { chartEvoModal.destroy(); chartEvoModal = null; }
+}
+
+function cambiarVistaEvolucion(vista) {
+    vistaEvolucion = vista;
+    document.getElementById('evo-tab-categoria')?.setAttribute('aria-selected', String(vista === 'categoria'));
+    document.getElementById('evo-tab-ritmo')?.setAttribute('aria-selected',     String(vista === 'ritmo'));
+    renderVistaEvolucion();
+}
+
+async function renderVistaEvolucion() {
+    if (chartEvoModal) { chartEvoModal.destroy(); chartEvoModal = null; }
+    if (vistaEvolucion === 'ritmo') await dibujarEvoRitmo();
+    else                            dibujarEvoCategorias();
+}
+
+// — Vista 1: el stack por categoría, en grande —
+function dibujarEvoCategorias() {
+    const d = datosEvolucion(datosActuales?.evolucion);
+    if (!d) return;
+    const { labels, datasets, periodos, catOrdenadas, valorDe } = d;
+
+    document.getElementById('evo-nota').textContent =
+        'Total facturado por mes, apilado por categoría. Incluye cuotas arrastradas.';
+
+    chartEvoModal = new Chart(document.getElementById('grafico-evo-modal').getContext('2d'), {
+        type: 'bar',
+        data: { labels, datasets: datasets.map(ds => ({ ...ds, maxBarThickness: 34 })) },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    display: true, position: 'bottom',
+                    labels: {
+                        color: PALETTE.textMuted, font: { size: 11, family: 'DM Sans' },
+                        boxWidth: 8, boxHeight: 8, borderRadius: 3, padding: 12, useBorderRadius: true,
+                    },
+                },
+                tooltip: {
+                    callbacks: {
+                        label:  item => ` ${item.dataset.label}  ${formatARS(item.raw)}`,
+                        footer: items => {
+                            const i = items[0]?.dataIndex;
+                            if (i === undefined) return '';
+                            const t = catOrdenadas.reduce((s, c) => s + valorDe(periodos[i], c), 0);
+                            return `Total  ${formatARS(t)}`;
+                        },
+                    },
+                },
+                datalabels: { display: false },
+            },
+            scales: {
+                x: { stacked: true, grid: { display: false }, border: { display: false },
+                     ticks: { color: PALETTE.textMuted, font: { size: 11 } } },
+                y: { stacked: true, grid: { color: PALETTE.border }, border: { display: false },
+                     ticks: { color: PALETTE.textMuted, font: { size: 11 },
+                              callback: v => formatARS(v, true), maxTicksLimit: 6 } },
+            },
+        },
+    });
+
+    tablaEvolucion(periodos, catOrdenadas, valorDe);
+}
+
+// — Vista 2: el ritmo, cada ciclo medido a la misma altura —
+async function dibujarEvoRitmo() {
+    const nota = document.getElementById('evo-nota');
+    nota.textContent = 'Calculando…';
+
+    try {
+        if (!ritmoHistorico || ritmoHistorico.mesActivo !== mesActivo) {
+            ritmoHistorico = await DB.obtenerRitmoHistorico(mesActivo);
+        }
+    } catch (err) {
+        console.error('Error al calcular el ritmo histórico:', err);
+        nota.textContent = 'No se pudo calcular el ritmo histórico.';
+        return;
+    }
+
+    if (!ritmoHistorico || !ritmoHistorico.meses.length) {
+        nota.textContent = 'No hay datos suficientes para comparar ciclos.';
+        return;
+    }
+
+    const { meses, dia, diasCiclo, enCurso, base } = ritmoHistorico;
+
+    nota.textContent = enCurso
+        ? `Cuánto llevaba gastado cada ciclo a su día ${dia} de ${diasCiclo}, que es la altura en la que está ${formatearMes(mesActivo)} hoy. Sólo consumo del ciclo: sin cuotas arrastradas ni créditos.`
+        : `Consumo de cada ciclo completo (${diasCiclo} días). Sólo consumo del ciclo: sin cuotas arrastradas ni créditos.`;
+
+    const labels = meses.map(m => formatearMes(m.mes));
+    const valores = meses.map(m => m.total);
+
+    // El mes activo es el sujeto: va en oro. Los demás son contexto y toman
+    // la polaridad — verde si en aquel ciclo se gastaba MÁS que ahora (o sea
+    // venís gastando menos), rojo si se gastaba menos.
+    const colores = meses.map(m =>
+        m.esActivo ? PALETTE.gold : (m.delta < 0 ? PALETTE.bueno : PALETTE.malo));
+
+    // Línea de referencia al nivel del mes activo: la que deja ver de un
+    // vistazo qué meses quedaron por encima y cuáles por debajo. Va punteada
+    // a propósito — es un umbral, no una grilla (la grilla es hairline sólida).
+    const lineaBase = {
+        id: 'lineaBase',
+        afterDatasetsDraw(chart) {
+            const { ctx, chartArea, scales } = chart;
+            const y = scales.y.getPixelForValue(base);
+            if (!isFinite(y)) return;
+            ctx.save();
+            ctx.setLineDash([5, 4]);
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = PALETTE.gold;
+            ctx.beginPath();
+            ctx.moveTo(chartArea.left, y);
+            ctx.lineTo(chartArea.right, y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.font = `500 10px 'DM Mono', monospace`;
+            ctx.fillStyle = PALETTE.gold;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(`${formatearMes(mesActivo)} · ${formatARS(base)}`, chartArea.right, y - 5);
+            ctx.restore();
+        },
+    };
+
+    chartEvoModal = new Chart(document.getElementById('grafico-evo-modal').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: `Consumo a día ${dia}`,
+                data: valores,
+                backgroundColor: colores,
+                borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+                borderSkipped: false,
+                maxBarThickness: 34,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { top: 28 } },   // aire para las etiquetas de %
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                // Una sola serie: el título del modal ya dice qué se grafica,
+                // así que una caja de leyenda con un swatch sólo gasta lugar.
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: item => ` ${formatARS(item.raw)}`,
+                        afterLabel: item => {
+                            const m = meses[item.dataIndex];
+                            if (m.esActivo) return '  ← mes que estás mirando';
+                            if (m.pct === null) return '  sin base para comparar';
+                            const signo = m.delta < 0 ? 'menos' : 'más';
+                            return `  ahora gastás ${formatARS(Math.abs(m.delta))} ${signo} (${formatPct(Math.abs(m.pct))})`;
+                        },
+                    },
+                },
+                // Acá la etiqueta en cada barra sí corresponde: la variación
+                // ES la historia del gráfico, no un adorno sobre otra cosa.
+                // Usa los tokens de delta (verde/rojo de estado), no el color
+                // de la marca.
+                datalabels: {
+                    display: ctx => !meses[ctx.dataIndex].esActivo && meses[ctx.dataIndex].pct !== null,
+                    anchor: 'end',
+                    align: 'end',
+                    offset: 2,
+                    color: ctx => meses[ctx.dataIndex].delta < 0 ? PALETTE.bueno : PALETTE.malo,
+                    font: { size: 11, family: "'DM Mono', monospace", weight: '500' },
+                    formatter: (_v, ctx) => {
+                        const m = meses[ctx.dataIndex];
+                        return `${m.delta < 0 ? '▼' : '▲'} ${formatPct(Math.abs(m.pct))}`;
+                    },
+                },
+            },
+            scales: {
+                x: { grid: { display: false }, border: { display: false },
+                     ticks: { color: PALETTE.textMuted, font: { size: 11 } } },
+                y: { beginAtZero: true, grid: { color: PALETTE.border }, border: { display: false },
+                     ticks: { color: PALETTE.textMuted, font: { size: 11 },
+                              callback: v => formatARS(v, true), maxTicksLimit: 6 } },
+            },
+        },
+        // ChartDataLabels no está registrado global (el top-10 se lo pasa por
+        // gráfico), así que va acá o las etiquetas de variación no se dibujan.
+        plugins: [lineaBase, ChartDataLabels],
+    });
+
+    tablaRitmo(meses);
+}
+
+// — Gemelos en tabla —
+function tablaEvolucion(periodos, cats, valorDe) {
+    const filas = periodos.map((p, i) => {
+        const total = cats.reduce((s, c) => s + valorDe(p, c), 0);
+        return `<tr><td>${formatearMes(p)}</td><td class="num">${formatARS(total)}</td></tr>`;
+    }).join('');
+
+    document.getElementById('evo-tabla-wrap').innerHTML = `
+        <table class="tabla-elegante evo-tabla">
+          <thead><tr><th>Mes</th><th class="num">Total facturado</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table>`;
+}
+
+function tablaRitmo(meses) {
+    const filas = meses.map(m => {
+        const variacion = m.esActivo ? '—'
+            : m.pct === null ? 's/base'
+            : `${m.delta < 0 ? '−' : '+'}${formatPct(Math.abs(m.pct))}`;
+        const clase = m.esActivo ? ' class="evo-fila-activa"' : '';
+        return `<tr${clase}>
+            <td>${formatearMes(m.mes)}</td>
+            <td class="num">${formatARS(m.total)}</td>
+            <td class="num">${variacion}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('evo-tabla-wrap').innerHTML = `
+        <table class="tabla-elegante evo-tabla">
+          <thead><tr>
+            <th>Mes</th><th class="num">Consumo al mismo día</th><th class="num">Variación de hoy</th>
+          </tr></thead>
+          <tbody>${filas}</tbody>
+        </table>`;
 }
 
 // ----------------------------------------------------------------
@@ -921,7 +1309,7 @@ function renderizarExtractoFiltrado() {
         pagina.forEach(mov => {
             const nombre    = mov.comercio || mov.comercio_crudo;
             const categoria = mov.categoria || 'A Clasificar';
-            const colorCat  = obtenerColorCategoria(categoria);
+            const colorCat  = colorCategoria(categoria);
 
             const montoARS = mov.monto_ars !== null
                 ? `<span class="${mov.es_reintegro ? 'monto-reintegro' : 'monto-tabla'}">${formatARS(mov.monto_ars)}</span>`
@@ -1074,6 +1462,15 @@ function bindEventos() {
         cambiarMesComparacion(e.target.value);
     });
 
+    // Modal de evolución histórica
+    document.getElementById('btn-ver-evolucion')?.addEventListener('click', abrirEvolucion);
+    document.getElementById('btn-cerrar-evolucion')?.addEventListener('click', cerrarEvolucion);
+    document.getElementById('evo-tab-categoria')?.addEventListener('click', () => cambiarVistaEvolucion('categoria'));
+    document.getElementById('evo-tab-ritmo')?.addEventListener('click',     () => cambiarVistaEvolucion('ritmo'));
+    document.getElementById('modal-evolucion')?.addEventListener('click', (e) => {
+        if (e.target.id === 'modal-evolucion') cerrarEvolucion();
+    });
+
     // Botón subir archivo
     document.getElementById('btn-subir')?.addEventListener('click', () => {
         document.getElementById('input-archivo').click();
@@ -1146,6 +1543,8 @@ function bindEventos() {
             cerrarTop10();
         } else if (document.getElementById('modal-cuotas')?.style.display === 'flex') {
             cerrarCuotas();
+        } else if (document.getElementById('modal-evolucion')?.style.display === 'flex') {
+            cerrarEvolucion();
         } else if (document.getElementById('modal-clasificar')?.style.display === 'flex') {
             cerrarModal();
         }
@@ -1481,13 +1880,6 @@ function formatFecha(fechaISO) {
     if (!fechaISO) return '';
     const [, m, d] = fechaISO.split('-');
     return `${d}/${m}`;
-}
-
-function obtenerColorCategoria(categoria) {
-    const cat = CATEGORIAS_DEFAULT?.find(c =>
-        c.nombre.toLowerCase() === categoria.toLowerCase()
-    );
-    return cat?.color || '#475569';
 }
 
 function mostrarSkeletons() {

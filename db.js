@@ -365,6 +365,75 @@ const DB = (() => {
     }
 
     // ----------------------------------------------------------------
+    // RITMO HISTÓRICO — todos los ciclos medidos a la misma altura
+    //
+    // Generaliza obtenerRitmo() a la historia entera: si hoy es el día 19
+    // del ciclo, devuelve cuánto llevaba gastado cada mes a SU día 19. Eso
+    // es lo que hace comparable el mes en curso, que va por la mitad, con
+    // los que ya cerraron — graficar el total cerrado contra un mes a medio
+    // andar es la comparación tramposa que este panel existe para evitar.
+    //
+    // Se consulta aparte del payload del dashboard porque sólo la usa el
+    // modal de evolución: no se paga en cada carga.
+    // ----------------------------------------------------------------
+    async function obtenerRitmoHistorico(mesActivo) {
+        if (typeof Ciclos === 'undefined') return null;
+
+        const cierreActivo = Ciclos.cierreDePeriodo(mesActivo);
+        if (!cierreActivo) return null;
+
+        const dia = Ciclos.diaDelCiclo(cierreActivo);
+        if (dia < 1) return null;
+
+        const { data, error } = await supabase
+            .from('movimientos')
+            .select('mes_periodo, fecha, monto_ars, es_reintegro, cuota_actual')
+            .eq('user_id', userId)
+            .order('mes_periodo', { ascending: true });
+
+        if (error) throw error;
+
+        // Cada ciclo tiene su propio corte, `dia` días después de su inicio.
+        // Se cachea por mes para no recalcular el calendario fila por fila.
+        const cortes = {};
+        const acum   = {};
+
+        data.forEach(m => {
+            const mes = m.mes_periodo;
+            if (!(mes in cortes)) {
+                const c     = Ciclos.cierreDePeriodo(mes);
+                cortes[mes] = c ? Ciclos.corteDelCiclo(c, dia) : null;
+                acum[mes]   = 0;
+            }
+            if (!cortes[mes]) return;
+
+            const ars = m.monto_ars != null ? parseFloat(m.monto_ars) : 0;
+            if (m.es_reintegro || ars < 0)    return;   // créditos afuera
+            if (m.cuota_actual > 1)           return;   // arrastre de ciclos viejos
+            if (!m.fecha || m.fecha >= cortes[mes]) return;
+            acum[mes] += ars;
+        });
+
+        const base = acum[mesActivo] || 0;
+
+        return {
+            mesActivo,
+            dia,
+            diasCiclo: Ciclos.DIAS_CICLO,
+            enCurso:   dia < Ciclos.DIAS_CICLO,
+            base,
+            meses: Object.keys(acum).sort().map(mes => ({
+                mes,
+                total:    acum[mes],
+                esActivo: mes === mesActivo,
+                // Variación del mes activo CONTRA este: negativa = gastando menos.
+                delta:    base - acum[mes],
+                pct:      acum[mes] > 0 ? ((base - acum[mes]) / acum[mes]) * 100 : null,
+            })),
+        };
+    }
+
+    // ----------------------------------------------------------------
     // OBTENER TODOS LOS DATOS DEL DASHBOARD en paralelo
     // ----------------------------------------------------------------
     async function obtenerDatosDashboard(mesPeriodo) {
@@ -643,9 +712,11 @@ const DB = (() => {
         obtenerMeses,
         obtenerDatosDashboard,
         obtenerExtracto,
-        // Se expone aparte del payload del dashboard: al cambiar el mes de
-        // comparación sólo hace falta recalcular este panel.
+        // Se exponen aparte del payload del dashboard: al cambiar el mes de
+        // comparación sólo hace falta recalcular ese panel, y el histórico
+        // se pide recién cuando se abre el modal de evolución.
         obtenerRitmo,
+        obtenerRitmoHistorico,
         // Importación
         importarMovimientos,
         // Clasificaciones

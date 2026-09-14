@@ -234,6 +234,11 @@
           <div class="chart-container">
             <canvas id="grafico-evolucion"></canvas>
           </div>
+          <div style="padding-top:8px; text-align:right;">
+            <button id="btn-ver-evolucion" class="btn-accion btn-secundario btn-ver-extracto">
+              Ver evolución →
+            </button>
+          </div>
         </article>
 
         <!-- Distribución por categoría -->
@@ -304,6 +309,42 @@
       <div class="modal-top10-chart">
         <canvas id="grafico-top"></canvas>
       </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       MODAL: EVOLUCIÓN HISTÓRICA
+       Dos vistas sobre el mismo eje: el stack por categoría y el
+       ritmo (cada ciclo medido a la misma altura). Nunca las dos a
+       la vez — son magnitudes distintas y compartir eje inventaría
+       una relación que no existe.
+  ============================================================ -->
+  <div class="modal-overlay" id="modal-evolucion"
+       role="dialog" aria-modal="true" aria-labelledby="evo-titulo" style="display:none;">
+    <div class="modal-caja modal-evo-caja">
+      <div class="modal-header">
+        <h2 id="evo-titulo">Evolución Histórica</h2>
+        <button class="modal-close" id="btn-cerrar-evolucion" aria-label="Cerrar">✕</button>
+      </div>
+
+      <div class="evo-tabs" role="tablist" aria-label="Vista del gráfico">
+        <button class="evo-tab" id="evo-tab-categoria" role="tab" aria-selected="true">
+          Por categoría
+        </button>
+        <button class="evo-tab" id="evo-tab-ritmo" role="tab" aria-selected="false">
+          Ritmo a la misma altura
+        </button>
+      </div>
+
+      <p class="evo-nota" id="evo-nota"></p>
+
+      <div class="modal-evo-chart">
+        <canvas id="grafico-evo-modal"></canvas>
+      </div>
+
+      <!-- Gemelo en tabla: todo valor del gráfico se puede leer acá, así
+           nada queda encerrado detrás del color ni del tooltip. -->
+      <div class="evo-tabla-wrap" id="evo-tabla-wrap"></div>
     </div>
   </div>
 
