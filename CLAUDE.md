@@ -65,8 +65,7 @@ Two debugging gotchas worth knowing before chasing a parser bug:
 
 ## Deployment
 
-Push to `main` → Vercel auto-deploys. The build command is `node build.js`, which reads env vars (`SUPABASE_URL`, `SUPABASE_ANON`, `SHEETS_MIGRATION_URL`) and writes `config.js` to the output.
- Commit messages follow the existing history: Spanish, with conventional-commit prefixes (`feat:` / `fix:`).
+Push to `main` → Vercel auto-deploys. The build command is `node build.js`, which reads env vars (`SUPABASE_URL`, `SUPABASE_ANON`, `SHEETS_MIGRATION_URL`) and writes `config.js` to the output. Commit messages follow the existing history: Spanish, with conventional-commit prefixes (`feat:` / `fix:`).
 
 ## Architecture
 
