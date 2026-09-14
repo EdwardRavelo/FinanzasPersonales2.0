@@ -61,11 +61,12 @@ Keep throwaway harnesses and their `node_modules/` **out of the repo** — `.git
 
 Two debugging gotchas worth knowing before chasing a parser bug:
 - **Rows are dropped silently.** `parsearArchivo()` filters out anything without a `fecha` or any amount, and `parsearFecha()` accepts *only* `DD/MM/YY(YY)` (anchored — a value carrying a time component like `15/08/2026 10:30` returns `null` despite the column being headed "Fecha y hora"). A file that parses to zero rows usually means a format change, not an empty file.
-- Reconcile totals against the **statement**, not the rolling XLSX feed — see Key Patterns below.
+- Reconcile totals against the **statement**, not the rolling XLSX feed — see *Reconciling with the Bank* below.
 
 ## Deployment
 
 Push to `main` → Vercel auto-deploys. The build command is `node build.js`, which reads env vars (`SUPABASE_URL`, `SUPABASE_ANON`, `SHEETS_MIGRATION_URL`) and writes `config.js` to the output.
+ Commit messages follow the existing history: Spanish, with conventional-commit prefixes (`feat:` / `fix:`).
 
 ## Architecture
 
@@ -80,11 +81,14 @@ Push to `main` → Vercel auto-deploys. The build command is `node build.js`, wh
 
 ### DB Layer (`db.js`)
 
-Single `DB` module with methods for:
+Single `DB` module — but the exported surface is narrower than the function list. Most query helpers are private and only reachable through `obtenerDatosDashboard()`:
 - Auth: `inicializar()`, `loginConGoogle()`, `enviarMagicLink()`, `obtenerSesion()`, `cerrarSesion()`, `escucharCambiosAuth(callback)`
-- Queries: `obtenerMeses()`, `obtenerDatosDashboard()`, `obtenerPendientes()`, `obtenerCategorias()`, `obtenerTodasClasificaciones()`
+- Queries: `obtenerMeses()`, `obtenerDatosDashboard()`, `obtenerExtracto()`, `obtenerPendientes()`, `obtenerCategorias()`
 - Writes: `importarMovimientos()`, `guardarClasificacion()`, `guardarVariasClasificaciones()`, `sincronizarCategorias()`, `migrarDesdeSheets()`
-- Utils: `tieneData()` — checks if the user has any data (used to show/hide the first-run onboarding banner `#banner-migracion`)
+- Utils: `setUserId()`, `getClient()`, `tieneData()` — the last checks if the user has any data (used to show/hide the first-run onboarding banner `#banner-migracion`)
+- **Private, never returned:** `obtenerKPIs()`, `obtenerDistribucion()`, `obtenerTop10()`, `obtenerEvolucion()`, `obtenerCuotas()`, `limpiarNombreComercio()` and `obtenerTodasClasificaciones()` — the last is what `importarMovimientos()` uses to re-apply saved classification rules to freshly imported rows.
+
+Four exported names are never called from `app.js`: `getClient()`, `obtenerExtracto()` (the dashboard payload already carries the extracto), `guardarClasificacion()` (the UI always saves in bulk) and `sincronizarCategorias()` — see below.
 
 `DB.setUserId(uid)` must be called immediately after auth — all query methods use the stored `userId` to scope their Supabase calls.
 
@@ -103,6 +107,8 @@ Single `DB` module with methods for:
 `guardarVariasClasificaciones()` runs sequentially (`for...of` + `await`), not in parallel — each call to `guardarClasificacion()` does a classification upsert plus a bulk update on `movimientos`.
 
 `migrarDesdeSheets()` inserts historical movements in batches of 500 with `ignoreDuplicates: true` (maps to `ON CONFLICT DO NOTHING` on the unique index). **This path is currently dormant:** the button and progress bar `ejecutarMigracion()` (in `app.js`) targets are no longer present in `index.html`, so it isn't reachable from the UI — the `?.` guards keep it from erroring. The code remains intact if the migration UI is re-added.
+
+**Nothing seeds the `categorias` table in the current UI.** `sincronizarCategorias()` is its only writer, and its only caller is `migrarDesdeSheets()` — the dormant path above. For a fresh user the table therefore stays empty, `obtenerCategorias()` returns `[]`, and the `colorMap` that `dibujarDashboard()` shares across every chart comes out empty: the donut falls back to `PALETTE.donut` in category order and `dibujarCatTop()` to `#94a3b8`. `schema.sql` has no `INSERT` for it either — its comment claiming the categories are created from the app on first classification is stale. To seed: call `DB.sincronizarCategorias()` once from the console while logged in, or insert the `CATEGORIAS_DEFAULT` rows by hand.
 
 ### Database Schema (`schema.sql`)
 
@@ -144,9 +150,7 @@ Also parses Google Sheets CSV export for historical migration (`parsearCSVSheets
 
 `normalizarMesPeriodo(filas)` is called after every parse: it sets `mes_periodo` on all rows to a single billing month, so installments (whose `fecha` is the original purchase date) land in the billing month rather than the month of purchase. It derives that month from `Ciclos.periodoDe()` applied to the **most recent** `fecha` in the file — the most recent rather than the modal month, because old installments drag in dates from previous months. When `Ciclos` is undefined (parser loaded in a headless harness) it falls back to the previous behaviour, the most frequent month.
 
-**The bank's total excludes "Compra en proceso"; ours includes it.** Unsettled purchases are shown in the web/app listing tagged *Compra en proceso* and are left **out** of the "En pesos" figure until they settle. Reconciled to the cent on a real pair: export (14) sums 1.802.672,62 while the app showed 1.773.620,67, and the difference (29.051,95) was exactly the three tagged rows. **The XLSX does not carry the tag** — 4 columns, no "proceso"/"pendiente" text anywhere, so `CASA TELMA $22.900,00` in-process is byte-identical to a settled row. This gap is therefore **irreducible from the XLSX**: during the open cycle the dashboard will always read higher than the bank by whatever is in flight. Reconcile against the closed statement PDF instead, where nothing is in process.
-
-Independently of that, the bank uses `CONSUMO EN PESOS` / `CONSUMO EN DOLARES` as a **placeholder merchant name** for recent transactions and swaps in the real merchant days later (same amount). `PATRONES_IGNORAR` does not filter them, so they can get stored — and a classification rule saved against `CONSUMO EN PESOS` would then apply retroactively to unrelated purchases, since rules key on `comercio_crudo`.
+**Placeholder merchant names.** The bank uses `CONSUMO EN PESOS` / `CONSUMO EN DOLARES` as a **placeholder merchant name** for recent transactions and swaps in the real merchant days later (same amount). `PATRONES_IGNORAR` does not filter them, so they can get stored — and a classification rule saved against `CONSUMO EN PESOS` would then apply retroactively to unrelated purchases, since rules key on `comercio_crudo`.
 
 Three filter lists applied during parsing:
 - `PATRONES_CARGOS_BANCARIOS` — rows matching these patterns are imported as category `"Cargos Bancarios"` (e.g., `IMP DE SELLOS`, `DB IVA`, `PERCEPCIÓN AFIP`)
@@ -183,7 +187,17 @@ Most DOM event wiring happens in `bindEventos()`, called once on `DOMContentLoad
 
 **`index.html` also carries three inline `<script>` blocks**, all dependent on `'unsafe-inline'` and none of them part of `app.js`: the CDN tags in `<head>`, the theme bootstrap at the top of `<body>`, and the cursor-spotlight IIFE after the `app.js` tag (see Styling). The last two are deliberately self-contained — they must keep working before/without `app.js`.
 
-The extracto table supports live filtering via a text search input and a category dropdown — both filter `extractoTodos` client-side and call `renderizarExtractoFiltrado()`, which also handles the 30-row pagination.
+**Five modals, no router.** Every view lives in `index.html` and is toggled by a class; each has an `abrirX()` / `cerrarX()` pair in `app.js`, wired in `bindEventos()`:
+
+| Modal | Opened by | Content drawn by |
+|---|---|---|
+| `#modal-top10` | `abrirTop10()` | `dibujarBarrasModal()` — builds `chartTop` lazily from `top10Data` |
+| `#modal-cuotas` | `abrirCuotas()` | `dibujarCuotas()` → `#cuerpo-cuotas` + `#pie-cuotas` |
+| `#modal-extracto` | `abrirExtracto()` | `renderizarExtractoFiltrado()` — the text search (`#extracto-buscar`) and the category dropdown (`#extracto-filtro-cat`) filter `extractoTodos` client-side and re-run it; it also owns the 30-row pagination |
+| `#modal-clasificar` | `abrirModalClasificar()` | `DB.obtenerPendientes()` + `DB.obtenerCategorias()`; saved by `guardarClasificaciones()` |
+| `#modal-confirmar-import` | `mostrarConfirmacionImport()` | filled by `manejarSubidaArchivo()`, resolved by `confirmarImportacion()` / `cancelarImportacion()` |
+
+**The IDs in `index.html` are a contract.** `app.js` does ~110 `getElementById` / `querySelector` lookups against roughly 60 IDs, with no data binding, no framework and no build step to catch a typo — renaming an element in the HTML breaks the JS silently at runtime, and only in the code path that touches it. `ejecutarMigracion()` is the standing example: its targets were removed from the HTML and the only symptom is a feature that quietly does nothing.
 
 ### Styling (`styles.css`)
 
@@ -197,10 +211,17 @@ Single stylesheet, no preprocessor. The design system is "Ethereal Glass": trans
 
 Breakpoints are max-width (`920px`, `640px`, `480px`) with one min-width `1440px` tier for large displays. The closing `prefers-reduced-motion: reduce` block is a blanket `*` reset (plus an explicit `animation: none` on the orbs), so new animated elements are covered automatically.
 
+## Reconciling with the Bank
+
+Every number dispute so far has come down to one of these four. Check them before assuming a parser bug.
+
+- **The two source documents are not equivalent.** The `Últimos movimientos` XLSX is a *rolling feed* of recent transactions, not a closed billing period — its total moves every time it's re-exported, and it will never equal a statement total. The `Statements.pdf` resumen is the closed period and carries the bank's official figures. Always check *which* document a number came from and *when* it was exported.
+- **Statement reconciliation identity** (verified against a real resumen): `TOTAL CONSUMOS (summed over every card section) + impuestos/percepciones − créditos = TOTAL A PAGAR` on the cover page. A statement can contain **more than one card section**, each with its own `TOTAL CONSUMOS` line — summing only the first one will silently under-count. Use this identity to validate parser changes; it closed to the cent.
+- **The KPI is the net; the bank's "En pesos" is the gross.** Reconcile against `totalARS`, not the figure on screen — see *DB Layer* above for the split.
+- **The bank's total excludes "Compra en proceso"; ours includes it.** Unsettled purchases are shown in the web/app listing tagged *Compra en proceso* and are left **out** of the "En pesos" figure until they settle. Reconciled to the cent on a real pair: export (14) sums 1.802.672,62 while the app showed 1.773.620,67, and the difference (29.051,95) was exactly the three tagged rows. **The XLSX does not carry the tag** — 4 columns, no "proceso"/"pendiente" text anywhere, so `CASA TELMA $22.900,00` in-process is byte-identical to a settled row. This gap is therefore **irreducible from the XLSX**: during the open cycle the dashboard will always read higher than the bank by whatever is in flight. Reconcile against the closed statement PDF instead, where nothing is in process.
+
 ## Key Patterns
 
-- **The two source documents are not equivalent.** The `Últimos movimientos` XLSX is a *rolling feed* of recent transactions, not a closed billing period — its total moves every time it's re-exported, and it will never equal a statement total. The `Statements.pdf` resumen is the closed period and carries the bank's official figures. When reconciling a discrepancy, always check *which* document a number came from and *when* it was exported before assuming a bug.
-- **Statement reconciliation identity** (verified against a real resumen): `TOTAL CONSUMOS (summed over every card section) + impuestos/percepciones − créditos = TOTAL A PAGAR` on the cover page. A statement can contain **more than one card section**, each with its own `TOTAL CONSUMOS` line — summing only the first one will silently under-count. Use this identity to validate parser changes; it closed to the cent.
 - **Import replaces the full month** — `importarMovimientos()` deletes all existing rows for the affected `mes_periodo` before re-inserting. The XLSX is the source of truth for that month; historical months are untouched.
 - **Import confirmation flow** — after parsing, `movimientosPendientes` holds the result until the user confirms; only then is `DB.importarMovimientos()` called.
 - **Client-side file parsing** — XLSX and PDF files never leave the browser; parsed in-memory and bulk-inserted to Supabase.
