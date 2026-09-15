@@ -495,7 +495,7 @@ function dibujarRitmo(ritmo, meses = []) {
 // preguntas distintas y el `title` lo aclara al pasar el mouse.
 // ----------------------------------------------------------------
 function dibujarNotasComparacion(ritmo) {
-    const pintar = (id, v, formato, sufijo) => {
+    const pintar = (id, v, fmt, unidad, cola, sufijo) => {
         const el = document.getElementById(id);
         if (!el) return;
 
@@ -512,26 +512,32 @@ function dibujarNotasComparacion(ritmo) {
         const menos = v.delta < 0;
         el.classList.add(menos ? 'es-menos' : 'es-mas');
 
-        const flecha = menos ? '▼' : '▲';
-        const cifra  = v.pct === null
-            ? formato(Math.abs(v.delta))
-            : `${formatPct(Math.abs(v.pct))} · ${formato(Math.abs(v.delta))}`;
+        // La nota muestra LOS DOS valores que compara, no sólo la diferencia.
+        // Con la variación sola el lector no tiene forma de saber contra qué
+        // se está midiendo: el conteo de movimientos, por ejemplo, no coincide
+        // con el número grande de arriba —ese cuenta todas las filas del mes,
+        // este sólo las del ciclo hasta el corte— y sin la base a la vista eso
+        // parece un error de cálculo en vez de una medida distinta.
+        const pct = v.pct === null ? '' : `${formatPct(Math.abs(v.pct))} · `;
+        const par = `${unidad}${fmt(v.actual)} vs ${fmt(v.anterior)}${cola}`;
 
-        el.textContent = `${flecha} ${cifra} vs ${formatearMes(ritmo.mesComparacion)}`;
+        el.textContent = `${menos ? '▼' : '▲'} ${pct}${par} · ${formatearMes(ritmo.mesComparacion)}`;
+
         el.title = ritmo.enCurso
-            ? `${formato(v.actual)} en este ciclo contra ${formato(v.anterior)} de ` +
-              `${formatearMes(ritmo.mesComparacion)} al mismo día (${ritmo.dia} de ${ritmo.diasCiclo}). ` +
-              `${sufijo}`
-            : `${formato(v.actual)} contra ${formato(v.anterior)}, ciclos completos. ${sufijo}`;
+            ? `${unidad}${fmt(v.actual)} en este ciclo contra ${unidad}${fmt(v.anterior)} de ` +
+              `${formatearMes(ritmo.mesComparacion)} al mismo día (${ritmo.dia} de ${ritmo.diasCiclo}). ${sufijo}`
+            : `${unidad}${fmt(v.actual)} contra ${unidad}${fmt(v.anterior)}, ciclos completos. ${sufijo}`;
     };
 
     pintar('val-usd-nota', ritmo?.usd,
-        n => `u$s ${n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        n => n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        'u$s ', '',
         'Sólo consumo del ciclo, sin cuotas ni créditos.');
 
     pintar('val-mov-nota', ritmo?.movimientos,
-        n => `${Math.round(n)} mov.`,
-        'Cuenta sólo movimientos del ciclo, por eso no coincide con el total de arriba.');
+        n => String(Math.round(n)),
+        '', ' mov',
+        'Cuenta sólo los movimientos del ciclo hasta el corte, por eso no coincide con el total del mes que muestra el KPI.');
 }
 
 // Llena el selector con los meses que tienen datos, salvo el que se está
