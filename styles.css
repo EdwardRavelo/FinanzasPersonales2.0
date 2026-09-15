@@ -108,7 +108,7 @@
   --cyan:           #17868a;
   --cyan-dim:       rgba(30, 143, 143, 0.10);
 
-  --green:          #1a7a44;
+  --green:          #187340;
   --green-dim:      rgba(26, 122, 68, 0.10);
   --red:            #b83244;
   --red-dim:        rgba(184, 50, 50, 0.08);
@@ -742,6 +742,13 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* Polaridad de la comparación contra otro ciclo: gastar menos es bueno.
+   Mismo semáforo que el panel de ritmo, para que la lectura sea una sola
+   en todo el dashboard. */
+.nota-kpi.es-menos { color: var(--green); }
+.nota-kpi.es-mas   { color: var(--red); }
+.nota-kpi[title]   { cursor: help; }
 
 .tarjeta-icon { display: none; }
 

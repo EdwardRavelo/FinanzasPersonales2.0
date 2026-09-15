@@ -311,7 +311,7 @@ const DB = (() => {
 
         const { data, error } = await supabase
             .from('movimientos')
-            .select('mes_periodo, fecha, monto_ars, es_reintegro, cuota_actual')
+            .select('mes_periodo, fecha, monto_ars, monto_usd, es_reintegro, cuota_actual')
             .eq('user_id', userId)
             .in('mes_periodo', [mesPeriodo, mesBase]);
 
@@ -337,17 +337,36 @@ const DB = (() => {
 
         // `fecha` es 'YYYY-MM-DD', así que la comparación de strings ordena
         // igual que la de fechas y evita construir un Date por fila.
-        const sumar = (mes, corte) => data.reduce((acc, m) => {
+        // Un solo recorrido devuelve las tres medidas del tramo: pesos,
+        // dólares y cantidad de movimientos. Las tres usan el mismo filtro
+        // —consumo del ciclo, sin créditos ni cuotas arrastradas— para que
+        // el porcentaje signifique lo mismo en los tres KPIs.
+        const medir = (mes, corte) => data.reduce((acc, m) => {
             if (m.mes_periodo !== mes) return acc;
-            const ars = m.monto_ars != null ? parseFloat(m.monto_ars) : 0;
-            if (m.es_reintegro || ars < 0) return acc;   // créditos afuera, igual que los KPIs
-            if (m.cuota_actual > 1)        return acc;   // arrastre de ciclos anteriores
-            if (!m.fecha || m.fecha >= corte) return acc; // todavía no pasó ese día del ciclo
-            return acc + ars;
-        }, 0);
 
-        const actual   = sumar(mesPeriodo, corteActual);
-        const anterior = sumar(mesBase,    corteBase);
+            const ars = m.monto_ars != null ? parseFloat(m.monto_ars) : 0;
+            const usd = m.monto_usd != null ? parseFloat(m.monto_usd) : 0;
+
+            if (m.es_reintegro || ars < 0 || usd < 0) return acc;   // créditos afuera
+            if (m.cuota_actual > 1)                   return acc;   // arrastre de ciclos viejos
+            if (!m.fecha || m.fecha >= corte)         return acc;   // ese día aún no llegó
+
+            acc.ars += ars;
+            acc.usd += usd;
+            acc.movimientos += 1;
+            return acc;
+        }, { ars: 0, usd: 0, movimientos: 0 });
+
+        const a = medir(mesPeriodo, corteActual);
+        const b = medir(mesBase,    corteBase);
+
+        // Sin base no hay porcentaje: se informa sólo la diferencia absoluta.
+        const variacion = (ahora, antes) => ({
+            actual:   ahora,
+            anterior: antes,
+            delta:    ahora - antes,
+            pct:      antes > 0 ? ((ahora - antes) / antes) * 100 : null,
+        });
 
         return {
             mesPeriodo,
@@ -356,11 +375,16 @@ const DB = (() => {
             enCurso:        dia < Ciclos.DIAS_CICLO,
             dia,
             diasCiclo:   Ciclos.DIAS_CICLO,
-            actual,
-            anterior,
-            delta: actual - anterior,
-            // Sin base no hay porcentaje: se informa sólo el monto.
-            pct: anterior > 0 ? ((actual - anterior) / anterior) * 100 : null,
+            // Campos planos de pesos: los consume el panel de ritmo, que ya
+            // estaba escrito contra ellos.
+            actual:   a.ars,
+            anterior: b.ars,
+            delta:    a.ars - b.ars,
+            pct:      b.ars > 0 ? ((a.ars - b.ars) / b.ars) * 100 : null,
+            // Las otras dos medidas, para las notas de los KPI de USD y de
+            // cantidad de movimientos.
+            usd:          variacion(a.usd, b.usd),
+            movimientos:  variacion(a.movimientos, b.movimientos),
         };
     }
 

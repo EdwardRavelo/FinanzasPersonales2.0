@@ -91,7 +91,7 @@ const PALETTES = {
     },
     light: {
         gold: '#a07028', goldDim: 'rgba(160,112,40,0.12)',
-        cyan: '#1e8f8f', green: '#1a7a44',
+        cyan: '#1e8f8f', green: '#187340',
         textMuted: '#5c6b7d', textMain: '#172032',   // == --text-muted / --text-main (claro)
         border: 'rgba(0,0,0,0.07)',
         tooltipBg: 'rgba(26,35,50,0.95)',
@@ -365,6 +365,7 @@ function dibujarDashboard(datos) {
 
     dibujarKPIs(datos.kpis);
     dibujarRitmo(datos.ritmo, datos.meses);
+    dibujarNotasComparacion(datos.ritmo);
     dibujarDonut(datos.distribucion);
     dibujarCatTop(datos.distribucion);
     dibujarBarras(datos.top10);
@@ -484,6 +485,55 @@ function dibujarRitmo(ritmo, meses = []) {
         : `ciclo completo · ${ritmo.diasCiclo} días`;
 }
 
+// ----------------------------------------------------------------
+// NOTAS DE COMPARACIÓN BAJO LOS KPI DE USD Y DE MOVIMIENTOS
+//
+// Misma lógica que el panel de ritmo y contra el mismo mes que elija su
+// selector: consumo del ciclo hasta el mismo día, sin cuotas arrastradas
+// ni créditos. Por eso el conteo de movimientos de la nota no coincide con
+// el número grande del KPI, que cuenta todas las filas del mes — son dos
+// preguntas distintas y el `title` lo aclara al pasar el mouse.
+// ----------------------------------------------------------------
+function dibujarNotasComparacion(ritmo) {
+    const pintar = (id, v, formato, sufijo) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        el.classList.remove('es-menos', 'es-mas');
+
+        // Sin mes de comparación no hay nada que decir: se vacía y el hueco
+        // colapsa solo.
+        if (!ritmo || !ritmo.hayComparacion || !v || v.delta === undefined) {
+            el.textContent = '';
+            el.removeAttribute('title');
+            return;
+        }
+
+        const menos = v.delta < 0;
+        el.classList.add(menos ? 'es-menos' : 'es-mas');
+
+        const flecha = menos ? '▼' : '▲';
+        const cifra  = v.pct === null
+            ? formato(Math.abs(v.delta))
+            : `${formatPct(Math.abs(v.pct))} · ${formato(Math.abs(v.delta))}`;
+
+        el.textContent = `${flecha} ${cifra} vs ${formatearMes(ritmo.mesComparacion)}`;
+        el.title = ritmo.enCurso
+            ? `${formato(v.actual)} en este ciclo contra ${formato(v.anterior)} de ` +
+              `${formatearMes(ritmo.mesComparacion)} al mismo día (${ritmo.dia} de ${ritmo.diasCiclo}). ` +
+              `${sufijo}`
+            : `${formato(v.actual)} contra ${formato(v.anterior)}, ciclos completos. ${sufijo}`;
+    };
+
+    pintar('val-usd-nota', ritmo?.usd,
+        n => `u$s ${n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        'Sólo consumo del ciclo, sin cuotas ni créditos.');
+
+    pintar('val-mov-nota', ritmo?.movimientos,
+        n => `${Math.round(n)} mov.`,
+        'Cuenta sólo movimientos del ciclo, por eso no coincide con el total de arriba.');
+}
+
 // Llena el selector con los meses que tienen datos, salvo el que se está
 // mirando. Se repuebla en cada dibujo porque la lista cambia al importar.
 function poblarSelectorRitmo(meses, mesElegido) {
@@ -515,6 +565,9 @@ async function cambiarMesComparacion(mes) {
     try {
         const ritmo = await DB.obtenerRitmo(mesActivo, mesComparacion);
         dibujarRitmo(ritmo, datosActuales?.meses || []);
+        // Las notas de USD y de movimientos comparan contra el mismo mes,
+        // así que se mueven con el selector.
+        dibujarNotasComparacion(ritmo);
         if (datosActuales) datosActuales.ritmo = ritmo;
     } catch (err) {
         console.error('Error al comparar meses:', err);
@@ -636,12 +689,20 @@ function dibujarDonut(distribucion) {
                         // 3:1 contra la superficie. La skill lo permite sólo
                         // si el valor se puede leer por otro canal: la leyenda
                         // lleva el monto, así que nada depende del color.
+                        // OJO: `fontColor` es obligatorio acá. Chart.js v4 lo
+                        // usa DIRECTO como fillStyle del texto y NO cae de
+                        // vuelta a labels.color cuando falta: sin él el
+                        // fillStyle queda sin definir y la leyenda se dibuja
+                        // en negro sobre el fondo oscuro, ilegible. El color
+                        // de la serie lo lleva el punto de al lado, nunca la
+                        // tipografía.
                         generateLabels(chart) {
                             const ds = chart.data.datasets[0];
                             return chart.data.labels.map((l, i) => ({
                                 text: `${l}  ${formatARS(ds.data[i], true)}`,
                                 fillStyle: ds.backgroundColor[i],
                                 strokeStyle: ds.backgroundColor[i],
+                                fontColor: PALETTE.textMuted,
                                 lineWidth: 0,
                                 index: i,
                             }));
