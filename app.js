@@ -55,8 +55,14 @@ let PALETTE = {
     goldDim:   'rgba(201,169,110,0.15)',
     cyan:      '#4fc3c3',
     green:     '#5ecf8c',
-    textMuted: '#5e7080',
-    textMain:  '#eef2f7',
+    // OJO: estos dos son la copia para Chart.js de --text-muted y --text-main
+    // de styles.css y tienen que seguir siendo EL MISMO hex. Se habían
+    // desincronizado: la copia de acá era más oscura y dejaba la tipografía
+    // de los gráficos en 3,83:1 sobre el fondo oscuro, debajo del 4,5:1 que
+    // pide el texto chico. La leyenda del donut, que es la que lleva los
+    // montos, quedaba ilegible.
+    textMuted: '#7d90a0',
+    textMain:  '#f2f5fa',
     border:    'rgba(255,255,255,0.06)',
     // Superficie sobre la que se dibuja: es el color de los separadores de
     // 2px entre marcas. Antes estaba hardcodeado en #080c12, así que en tema
@@ -73,7 +79,7 @@ const PALETTES = {
     dark: {
         gold: '#c9a96e', goldDim: 'rgba(201,169,110,0.15)',
         cyan: '#4fc3c3', green: '#5ecf8c',
-        textMuted: '#5e7080', textMain: '#eef2f7',
+        textMuted: '#7d90a0', textMain: '#f2f5fa',   // == --text-muted / --text-main (oscuro)
         border: 'rgba(255,255,255,0.06)',
         tooltipBg: 'rgba(8,12,18,0.95)',
         tooltipBorder: 'rgba(201,169,110,0.3)',
@@ -86,7 +92,7 @@ const PALETTES = {
     light: {
         gold: '#a07028', goldDim: 'rgba(160,112,40,0.12)',
         cyan: '#1e8f8f', green: '#1a7a44',
-        textMuted: '#64748b', textMain: '#1a2332',
+        textMuted: '#5c6b7d', textMain: '#172032',   // == --text-muted / --text-main (claro)
         border: 'rgba(0,0,0,0.07)',
         tooltipBg: 'rgba(26,35,50,0.95)',
         tooltipBorder: 'rgba(160,112,40,0.3)',
