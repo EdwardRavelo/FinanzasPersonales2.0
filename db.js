@@ -373,8 +373,11 @@ const DB = (() => {
     // los que ya cerraron — graficar el total cerrado contra un mes a medio
     // andar es la comparación tramposa que este panel existe para evitar.
     //
-    // Se consulta aparte del payload del dashboard porque sólo la usa el
-    // modal de evolución: no se paga en cada carga.
+    // Entra al payload del dashboard porque el panel de evolución muestra
+    // esta vista como principal. Es la segunda consulta que barre la
+    // historia entera (la otra es obtenerEvolucion), lo cual es aceptable
+    // en un dashboard personal de una decena de meses; si la historia
+    // creciera, las dos deberían pasar a una vista agregada en Postgres.
     // ----------------------------------------------------------------
     async function obtenerRitmoHistorico(mesActivo) {
         if (typeof Ciclos === 'undefined') return null;
@@ -437,7 +440,8 @@ const DB = (() => {
     // OBTENER TODOS LOS DATOS DEL DASHBOARD en paralelo
     // ----------------------------------------------------------------
     async function obtenerDatosDashboard(mesPeriodo) {
-        const [meses, kpis, distribucion, top10, evolucion, cuotas, extracto, categorias, ritmo] =
+        const [meses, kpis, distribucion, top10, evolucion, cuotas, extracto, categorias,
+               ritmo, ritmoHistorico] =
             await Promise.all([
                 obtenerMeses(),
                 obtenerKPIs(mesPeriodo),
@@ -448,9 +452,14 @@ const DB = (() => {
                 obtenerExtracto(mesPeriodo),
                 obtenerCategorias(),
                 obtenerRitmo(mesPeriodo),
+                // Desde que el ritmo es la vista principal del panel de
+                // evolución, se necesita en cada carga y ya no alcanza con
+                // pedirlo al abrir el modal.
+                obtenerRitmoHistorico(mesPeriodo),
             ]);
 
-        return { meses, kpis, distribucion, top10, evolucion, cuotas, extracto, categorias, ritmo };
+        return { meses, kpis, distribucion, top10, evolucion, cuotas, extracto, categorias,
+                 ritmo, ritmoHistorico };
     }
 
     // ----------------------------------------------------------------

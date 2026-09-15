@@ -777,6 +777,19 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
   gap: 8px;
   flex-shrink: 0;
 }
+/* Sufijo del título del bento: el día del ciclo en el que se está midiendo.
+   Va al extremo derecho de la fila, en tinta tenue. */
+.bento-nota {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: none;
+  flex-shrink: 0;
+}
+
 .bento-titulo::before {
   content: '';
   width: 18px; height: 1px;

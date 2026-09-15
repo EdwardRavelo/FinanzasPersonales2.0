@@ -362,7 +362,7 @@ function dibujarDashboard(datos) {
     dibujarDonut(datos.distribucion);
     dibujarCatTop(datos.distribucion);
     dibujarBarras(datos.top10);
-    dibujarEvolucion(datos.evolucion);
+    dibujarEvolucionPanel(datos.ritmoHistorico);
     dibujarCuotas(datos.cuotas);
     dibujarExtracto(datos.extracto);
 }
@@ -825,92 +825,142 @@ function datosEvolucion(evolucion, tope = PALETTE.series.length) {
     return { labels, datasets, periodos, catOrdenadas, valorDe };
 }
 
-function dibujarEvolucion(evolucion) {
-    if (chartEvo) chartEvo.destroy();
+// ----------------------------------------------------------------
+// GRÁFICO DE RITMO — cada ciclo medido a la misma altura que el actual
+//
+// Es la vista principal de la evolución: compara peras con peras. Graficar
+// el total cerrado de los meses viejos contra un mes que va por la mitad
+// sería la comparación tramposa que este gráfico existe para evitar.
+//
+// Forma: énfasis + polaridad. El mes que se está mirando es el sujeto y va
+// en oro; los demás son contexto y toman el signo de la diferencia. La línea
+// de referencia al nivel actual es lo que deja ver de un vistazo quién quedó
+// arriba y quién abajo — va punteada a propósito, porque es un umbral; la
+// grilla, que no lo es, queda en hairline sólida.
+//
+// Lo comparten el panel y el modal: misma lectura, distinto tamaño.
+// ----------------------------------------------------------------
+function construirChartRitmo(canvasId, rh, { compacto = false } = {}) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
 
-    const d = datosEvolucion(evolucion, 5);   // 4 categorías + "Otros"
-    if (!d) return;
-    const { labels, datasets, periodos, catOrdenadas, valorDe } = d;
+    const { meses, dia, base } = rh;
+    const labels  = meses.map(m => formatearMes(m.mes));
+    const valores = meses.map(m => m.total);
 
-    const ctx = document.getElementById('grafico-evolucion').getContext('2d');
-    chartEvo = new Chart(ctx, {
+    // Verde = en aquel ciclo se gastaba MÁS que ahora (venís gastando menos).
+    // Rojo = se gastaba menos. Oro = el mes que estás mirando.
+    const colores = meses.map(m =>
+        m.esActivo ? PALETTE.gold : (m.delta < 0 ? PALETTE.bueno : PALETTE.malo));
+
+    const lineaBase = {
+        id: 'lineaBase',
+        afterDatasetsDraw(chart) {
+            const { ctx, chartArea, scales } = chart;
+            const y = scales.y.getPixelForValue(base);
+            if (!isFinite(y)) return;
+            ctx.save();
+            ctx.setLineDash([5, 4]);
+            ctx.lineWidth   = 1.5;
+            ctx.strokeStyle = PALETTE.gold;
+            ctx.beginPath();
+            ctx.moveTo(chartArea.left, y);
+            ctx.lineTo(chartArea.right, y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+            // El rótulo de la línea NO va sobre el canvas: se pisaba con la
+            // etiqueta de variación de la última barra, que cae justo ahí
+            // cuando ese mes anda cerca del nivel actual. Lo dice la nota de
+            // arriba, que no puede chocarse con nada.
+        },
+    };
+
+    return new Chart(canvas.getContext('2d'), {
         type: 'bar',
-        data: { labels, datasets },
+        data: {
+            labels,
+            datasets: [{
+                label: `Consumo a día ${dia}`,
+                data: valores,
+                backgroundColor: colores,
+                borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+                borderSkipped: false,
+                maxBarThickness: compacto ? 22 : 34,
+            }],
+        },
         options: {
-            responsive:          true,
+            responsive: true,
             maintainAspectRatio: false,
-            animation:           { duration: 600, easing: 'easeOutQuart' },
-            interaction:         { mode: 'nearest', intersect: true },
-            categoryPercentage:  0.78,
-            barPercentage:       1.0,
+            animation: { duration: 600, easing: 'easeOutQuart' },
+            layout: { padding: { top: compacto ? 20 : 28 } },  // aire para las etiquetas
+            interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: {
-                    display:  true,
-                    position: 'bottom',
-                    labels: {
-                        color:           PALETTE.textMuted,
-                        font:            { size: 10, family: 'DM Sans' },
-                        boxWidth:        8,
-                        boxHeight:       8,
-                        borderRadius:    3,
-                        padding:         10,
-                        useBorderRadius: true,
-                    },
-                },
+                // Una sola serie: el título ya dice qué se grafica, así que
+                // una caja de leyenda con un swatch sólo gastaría lugar.
+                legend: { display: false },
                 tooltip: {
-                    mode:            'nearest',
-                    intersect:       true,
-                    backgroundColor: 'rgba(8,12,18,0.92)',
-                    borderColor:     'rgba(255,255,255,0.08)',
-                    borderWidth:     1,
-                    padding:         { x: 14, y: 10 },
-                    cornerRadius:    10,
-                    displayColors:   true,
-                    boxWidth:        8,
-                    boxHeight:       8,
-                    titleColor:      PALETTE.textMuted,
-                    titleFont:       { size: 11, family: 'DM Sans' },
-                    bodyColor:       PALETTE.textMain,
-                    bodyFont:        { size: 13, family: 'DM Mono', weight: '500' },
-                    footerColor:     PALETTE.textMain,
-                    footerFont:      { size: 13, family: 'DM Mono', weight: '700' },
-                    footerMarginTop: 8,
                     callbacks: {
-                        title:      items => items[0]?.label ?? '',
-                        label:      item  => ` ${item.dataset.label}`,
-                        afterLabel: item  => `  ${formatARS(item.raw)}`,
-                        footer:     items => {
-                            const idx = items[0]?.dataIndex;
-                            if (idx === undefined) return '';
-                            const total = catOrdenadas.reduce((s, cat) => s + valorDe(periodos[idx], cat), 0);
-                            return `Total  ${formatARS(total)}`;
+                        title: items => items[0]?.label ?? '',
+                        label: item  => ` ${formatARS(item.raw)}`,
+                        afterLabel: item => {
+                            const m = meses[item.dataIndex];
+                            if (m.esActivo)       return '  ← mes que estás mirando';
+                            if (m.pct === null)   return '  sin base para comparar';
+                            const signo = m.delta < 0 ? 'menos' : 'más';
+                            return `  ahora gastás ${formatARS(Math.abs(m.delta))} ${signo} (${formatPct(Math.abs(m.pct))})`;
                         },
                     },
                 },
-                datalabels: { display: false },
-            },
-            scales: {
-                x: {
-                    stacked: true,
-                    grid:    { display: false },
-                    border:  { display: false },
-                    ticks:   { color: PALETTE.textMuted, font: { size: 10 } },
-                },
-                y: {
-                    stacked: true,
-                    grid:    { color: PALETTE.border },
-                    border:  { display: false },
-                    ticks:   {
-                        color:         PALETTE.textMuted,
-                        font:          { size: 10 },
-                        callback:      val => formatARS(val, true),
-                        maxTicksLimit: 5,
+                // Etiquetar todas las barras es correcto acá: la variación ES
+                // la historia del gráfico, no un adorno sobre otra medida.
+                // Usan los tokens de delta, no el color de la marca.
+                datalabels: {
+                    display: ctx => !meses[ctx.dataIndex].esActivo && meses[ctx.dataIndex].pct !== null,
+                    anchor: 'end',
+                    align: 'end',
+                    offset: 2,
+                    color: ctx => meses[ctx.dataIndex].delta < 0 ? PALETTE.bueno : PALETTE.malo,
+                    font: { size: compacto ? 9 : 11, family: "'DM Mono', monospace", weight: '500' },
+                    formatter: (_v, ctx) => {
+                        const m = meses[ctx.dataIndex];
+                        return `${m.delta < 0 ? '▼' : '▲'} ${formatPct(Math.abs(m.pct))}`;
                     },
                 },
             },
+            scales: {
+                x: { grid: { display: false }, border: { display: false },
+                     ticks: { color: PALETTE.textMuted, font: { size: compacto ? 10 : 11 } } },
+                y: { beginAtZero: true, grid: { color: PALETTE.border }, border: { display: false },
+                     ticks: { color: PALETTE.textMuted, font: { size: compacto ? 10 : 11 },
+                              callback: v => formatARS(v, true),
+                              maxTicksLimit: compacto ? 4 : 6 } },
+            },
         },
-        plugins: [],
+        plugins: [lineaBase, ChartDataLabels],
     });
+}
+
+// Panel del bento. Muestra los últimos seis ciclos: con diez, las etiquetas
+// de variación se pisan entre sí en 130px de alto. El modal tiene la historia
+// completa, y el botón del panel lleva ahí.
+function dibujarEvolucionPanel(rh) {
+    if (chartEvo) { chartEvo.destroy(); chartEvo = null; }
+
+    const nota = document.getElementById('evo-panel-nota');
+    if (!rh || !rh.meses?.length) {
+        if (nota) nota.textContent = '';
+        return;
+    }
+
+    if (nota) {
+        nota.textContent = rh.enCurso
+            ? `día ${rh.dia} de ${rh.diasCiclo}`
+            : `ciclo completo`;
+    }
+
+    chartEvo = construirChartRitmo('grafico-evolucion',
+        { ...rh, meses: rh.meses.slice(-6) }, { compacto: true });
 }
 
 // ----------------------------------------------------------------
@@ -923,8 +973,9 @@ function dibujarEvolucion(evolucion) {
 // inventa una relación que los datos no tienen.
 // ----------------------------------------------------------------
 let chartEvoModal  = null;
-let vistaEvolucion = 'categoria';
-let ritmoHistorico = null;   // cache; se pide al abrir el modal, no en cada carga
+// El ritmo es la vista principal: el modal abre ahí y el stack por categoría
+// queda como segunda lectura.
+let vistaEvolucion = 'ritmo';
 
 function abrirEvolucion() {
     const modal = document.getElementById('modal-evolucion');
@@ -946,13 +997,13 @@ function cambiarVistaEvolucion(vista) {
     renderVistaEvolucion();
 }
 
-async function renderVistaEvolucion() {
+function renderVistaEvolucion() {
     if (chartEvoModal) { chartEvoModal.destroy(); chartEvoModal = null; }
-    if (vistaEvolucion === 'ritmo') await dibujarEvoRitmo();
+    if (vistaEvolucion === 'ritmo') dibujarEvoRitmo();
     else                            dibujarEvoCategorias();
 }
 
-// — Vista 1: el stack por categoría, en grande —
+// — Vista secundaria: el stack por categoría, en grande —
 function dibujarEvoCategorias() {
     const d = datosEvolucion(datosActuales?.evolucion);
     if (!d) return;
@@ -1002,133 +1053,26 @@ function dibujarEvoCategorias() {
     tablaEvolucion(periodos, catOrdenadas, valorDe);
 }
 
-// — Vista 2: el ritmo, cada ciclo medido a la misma altura —
-async function dibujarEvoRitmo() {
+// — Vista principal: el ritmo, cada ciclo medido a la misma altura —
+function dibujarEvoRitmo() {
     const nota = document.getElementById('evo-nota');
-    nota.textContent = 'Calculando…';
+    const rh   = datosActuales?.ritmoHistorico;
 
-    try {
-        if (!ritmoHistorico || ritmoHistorico.mesActivo !== mesActivo) {
-            ritmoHistorico = await DB.obtenerRitmoHistorico(mesActivo);
-        }
-    } catch (err) {
-        console.error('Error al calcular el ritmo histórico:', err);
-        nota.textContent = 'No se pudo calcular el ritmo histórico.';
-        return;
-    }
-
-    if (!ritmoHistorico || !ritmoHistorico.meses.length) {
+    if (!rh || !rh.meses?.length) {
         nota.textContent = 'No hay datos suficientes para comparar ciclos.';
+        document.getElementById('evo-tabla-wrap').innerHTML = '';
         return;
     }
 
-    const { meses, dia, diasCiclo, enCurso, base } = ritmoHistorico;
+    const encabezado = rh.enCurso
+        ? `Cuánto llevaba gastado cada ciclo a su día ${rh.dia} de ${rh.diasCiclo}, que es la altura en la que está ${formatearMes(rh.mesActivo)} hoy.`
+        : `Consumo de cada ciclo completo (${rh.diasCiclo} días).`;
 
-    nota.textContent = enCurso
-        ? `Cuánto llevaba gastado cada ciclo a su día ${dia} de ${diasCiclo}, que es la altura en la que está ${formatearMes(mesActivo)} hoy. Sólo consumo del ciclo: sin cuotas arrastradas ni créditos.`
-        : `Consumo de cada ciclo completo (${diasCiclo} días). Sólo consumo del ciclo: sin cuotas arrastradas ni créditos.`;
+    nota.textContent = `${encabezado} La línea punteada marca ${formatearMes(rh.mesActivo)}: ` +
+        `${formatARS(rh.base)}. Sólo consumo del ciclo: sin cuotas arrastradas ni créditos.`;
 
-    const labels = meses.map(m => formatearMes(m.mes));
-    const valores = meses.map(m => m.total);
-
-    // El mes activo es el sujeto: va en oro. Los demás son contexto y toman
-    // la polaridad — verde si en aquel ciclo se gastaba MÁS que ahora (o sea
-    // venís gastando menos), rojo si se gastaba menos.
-    const colores = meses.map(m =>
-        m.esActivo ? PALETTE.gold : (m.delta < 0 ? PALETTE.bueno : PALETTE.malo));
-
-    // Línea de referencia al nivel del mes activo: la que deja ver de un
-    // vistazo qué meses quedaron por encima y cuáles por debajo. Va punteada
-    // a propósito — es un umbral, no una grilla (la grilla es hairline sólida).
-    const lineaBase = {
-        id: 'lineaBase',
-        afterDatasetsDraw(chart) {
-            const { ctx, chartArea, scales } = chart;
-            const y = scales.y.getPixelForValue(base);
-            if (!isFinite(y)) return;
-            ctx.save();
-            ctx.setLineDash([5, 4]);
-            ctx.lineWidth = 1.5;
-            ctx.strokeStyle = PALETTE.gold;
-            ctx.beginPath();
-            ctx.moveTo(chartArea.left, y);
-            ctx.lineTo(chartArea.right, y);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.font = `500 10px 'DM Mono', monospace`;
-            ctx.fillStyle = PALETTE.gold;
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'bottom';
-            ctx.fillText(`${formatearMes(mesActivo)} · ${formatARS(base)}`, chartArea.right, y - 5);
-            ctx.restore();
-        },
-    };
-
-    chartEvoModal = new Chart(document.getElementById('grafico-evo-modal').getContext('2d'), {
-        type: 'bar',
-        data: {
-            labels,
-            datasets: [{
-                label: `Consumo a día ${dia}`,
-                data: valores,
-                backgroundColor: colores,
-                borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
-                borderSkipped: false,
-                maxBarThickness: 34,
-            }],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: { padding: { top: 28 } },   // aire para las etiquetas de %
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-                // Una sola serie: el título del modal ya dice qué se grafica,
-                // así que una caja de leyenda con un swatch sólo gasta lugar.
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: item => ` ${formatARS(item.raw)}`,
-                        afterLabel: item => {
-                            const m = meses[item.dataIndex];
-                            if (m.esActivo) return '  ← mes que estás mirando';
-                            if (m.pct === null) return '  sin base para comparar';
-                            const signo = m.delta < 0 ? 'menos' : 'más';
-                            return `  ahora gastás ${formatARS(Math.abs(m.delta))} ${signo} (${formatPct(Math.abs(m.pct))})`;
-                        },
-                    },
-                },
-                // Acá la etiqueta en cada barra sí corresponde: la variación
-                // ES la historia del gráfico, no un adorno sobre otra cosa.
-                // Usa los tokens de delta (verde/rojo de estado), no el color
-                // de la marca.
-                datalabels: {
-                    display: ctx => !meses[ctx.dataIndex].esActivo && meses[ctx.dataIndex].pct !== null,
-                    anchor: 'end',
-                    align: 'end',
-                    offset: 2,
-                    color: ctx => meses[ctx.dataIndex].delta < 0 ? PALETTE.bueno : PALETTE.malo,
-                    font: { size: 11, family: "'DM Mono', monospace", weight: '500' },
-                    formatter: (_v, ctx) => {
-                        const m = meses[ctx.dataIndex];
-                        return `${m.delta < 0 ? '▼' : '▲'} ${formatPct(Math.abs(m.pct))}`;
-                    },
-                },
-            },
-            scales: {
-                x: { grid: { display: false }, border: { display: false },
-                     ticks: { color: PALETTE.textMuted, font: { size: 11 } } },
-                y: { beginAtZero: true, grid: { color: PALETTE.border }, border: { display: false },
-                     ticks: { color: PALETTE.textMuted, font: { size: 11 },
-                              callback: v => formatARS(v, true), maxTicksLimit: 6 } },
-            },
-        },
-        // ChartDataLabels no está registrado global (el top-10 se lo pasa por
-        // gráfico), así que va acá o las etiquetas de variación no se dibujan.
-        plugins: [lineaBase, ChartDataLabels],
-    });
-
-    tablaRitmo(meses);
+    chartEvoModal = construirChartRitmo('grafico-evo-modal', rh, { compacto: false });
+    tablaRitmo(rh.meses);
 }
 
 // — Gemelos en tabla —

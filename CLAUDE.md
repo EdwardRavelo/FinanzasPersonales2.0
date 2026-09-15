@@ -91,7 +91,7 @@ Four exported names are never called from `app.js`: `getClient()`, `obtenerExtra
 
 `DB.setUserId(uid)` must be called immediately after auth — all query methods use the stored `userId` to scope their Supabase calls.
 
-`obtenerDatosDashboard(mes)` fetches everything in a single `Promise.all`: KPIs, donut distribution, top-10 merchants, historical evolution, installments, full statement, and categories.
+`obtenerDatosDashboard(mes)` fetches everything in a single `Promise.all`: KPIs, donut distribution, top-10 merchants, historical evolution, installments, full statement, categories, and both ritmo queries. Two of those (`obtenerEvolucion()` and `obtenerRitmoHistorico()`) scan the user's whole history — fine for a personal dashboard of a dozen months, but they are the first thing to move behind an aggregate view if it ever grows.
 
 **Credits/refunds are excluded from every aggregate.** `obtenerKPIs()` splits movements in two: anything with `es_reintegro`, a negative `monto_ars`, or a negative `monto_usd` goes to `creditosARS`/`creditosUSD`; everything else to `totalARS`/`totalUSD`. `totalARS` is therefore *consumption only*, matching the shape of the bank's "En pesos" figure, which likewise does not net out credits. `netoARS` (= total + créditos, since credits are negative) and `netoUSD` are what actually gets paid.
 
@@ -180,11 +180,17 @@ On load: `bindEventos()` runs first, then `DB.escucharCambiosAuth()` is subscrib
 
 **`PALETTE.surface` is the separator color and must track the theme.** The 2px gap between donut segments and between stacked bars is painted in the surface color — the skill's rule is that white space separates marks, never a stroke around them. It used to be hardcoded `#080c12`, so in light theme the donut drew black rings around every segment.
 
-**The evolution modal carries two views and never mixes them.** `#modal-evolucion` toggles between `dibujarEvoCategorias()` (the stack, larger) and `dibujarEvoRitmo()` via `cambiarVistaEvolucion()`. They plot different measures — a closed month's full total vs. a partial, comparable one — so they get separate views rather than two y-scales on one plot, which would invent a relationship the data doesn't have. Both write a table twin (`tablaEvolucion()` / `tablaRitmo()`) beneath the chart, so no value is reachable only through a tooltip or only through color.
+**The ritmo view is the primary one; the category stack is secondary.** The `area-evo` bento panel ("Ritmo por Ciclo") plots each cycle measured at **the same day** the active month is on, and `#modal-evolucion` opens on that same view, with `dibujarEvoCategorias()` (the stack) as the second tab. The two plot different measures — a closed month's full total vs. a partial, comparable one — so they stay in separate views rather than sharing two y-scales on one plot, which would invent a relationship the data doesn't have. Both modal views write a table twin (`tablaEvolucion()` / `tablaRitmo()`) beneath the chart, so no value is reachable only through a tooltip or only through color.
 
-The ritmo view is `DB.obtenerRitmoHistorico(mes)` generalized across every month: each cycle measured at **the same day** the active one is on. Bars are emphasis + polarity — gold for the active month, green where that cycle was running higher than now, red where it was lower — with a dashed gold reference line at the active month's level (dashed on purpose: it is a threshold, while gridlines stay solid hairlines). The per-bar `▼/▲ %` labels use the delta/status tokens (`PALETTE.bueno` / `PALETTE.malo`), not the mark color. Labelling *every* bar is deliberate here and is the one place it's right: the variation is the chart's entire story, not an ornament on top of some other measure. **`ChartDataLabels` is not registered globally** — each chart that wants labels passes it in its own `plugins` array, so a new chart that forgets silently renders none.
+`construirChartRitmo(canvasId, rh, { compacto })` builds that chart for both surfaces. Form is emphasis + polarity: gold for the active month, green where that cycle was running higher than now, red where it was lower, plus a dashed gold reference line at the active month's level (dashed on purpose — it is a threshold, while gridlines stay solid hairlines). The per-bar `▼/▲ %` labels use the delta/status tokens (`PALETTE.bueno` / `PALETTE.malo`), never the mark color. Labelling *every* bar is deliberate and is the one place it's right: the variation is the chart's entire story, not an ornament on some other measure.
 
-`datosEvolucion(evolucion, tope)` builds labels/datasets for both the panel and the modal; the panel passes `5` (4 categories + `Otros`) and the modal `8`, because eight stacked segments plus their gaps inside a 130px panel read as a barcode.
+Two things that were fixed by looking at the render, and will come back if undone:
+- **The reference line's value is in the note text, not on the canvas.** Drawn at the plot's right edge it collided with the last bar's `▼ %` label whenever that month sat near the current level — which is exactly when the reader most needs both.
+- **The panel plots only the last 6 cycles** (`rh.meses.slice(-6)`); with ten, the variation labels overlap inside a 130px-tall panel. The modal carries the full history, and the panel's button goes there.
+
+**`ChartDataLabels` is not registered globally** — every chart that wants labels passes it in its own `plugins` array, so one that forgets silently renders none.
+
+`datosEvolucion(evolucion, tope)` still builds the stack's labels/datasets, now only for the modal (`tope` 8 = 7 categories + `Otros`).
 
 Each of the four Chart.js instances is a module-level global; every render destroys the old instance before creating a new one (`if (chartX) chartX.destroy()`). `chartTorta` (donut) and `chartEvo` (stacked evolution bars) are drawn by `dibujarDashboard`; `chartTop` is built lazily by `dibujarBarrasModal()` only when the Top-10 modal opens (the panel itself just shows a top-5 `<ol>`). The donut carries an inline plugin `pluginTextoCenter` that paints the month total in the hole; the bar charts use the `ChartDataLabels` plugin for value labels.
 
@@ -215,7 +221,7 @@ Most DOM event wiring happens in `bindEventos()`, called once on `DOMContentLoad
 | `#modal-top10` | `abrirTop10()` | `dibujarBarrasModal()` — builds `chartTop` lazily from `top10Data` |
 | `#modal-cuotas` | `abrirCuotas()` | `dibujarCuotas()` → `#cuerpo-cuotas` + `#pie-cuotas` |
 | `#modal-extracto` | `abrirExtracto()` | `renderizarExtractoFiltrado()` — the text search (`#extracto-buscar`) and the category dropdown (`#extracto-filtro-cat`) filter `extractoTodos` client-side and re-run it; it also owns the 30-row pagination |
-| `#modal-evolucion` | `abrirEvolucion()` | `dibujarEvoCategorias()` / `dibujarEvoRitmo()`, switched by `cambiarVistaEvolucion()`; the ritmo view lazy-loads `DB.obtenerRitmoHistorico()` and caches it per active month |
+| `#modal-evolucion` | `abrirEvolucion()` | `dibujarEvoRitmo()` (default) / `dibujarEvoCategorias()`, switched by `cambiarVistaEvolucion()`; both read `datosActuales`, so the modal issues no query of its own |
 | `#modal-clasificar` | `abrirModalClasificar()` | `DB.obtenerPendientes()` + `DB.obtenerCategorias()`; saved by `guardarClasificaciones()` |
 | `#modal-confirmar-import` | `mostrarConfirmacionImport()` | filled by `manejarSubidaArchivo()`, resolved by `confirmarImportacion()` / `cancelarImportacion()` |
 

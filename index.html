@@ -228,15 +228,21 @@
       ---------------------------------------------------------- -->
       <section class="bento-grid" aria-label="Paneles del dashboard">
 
-        <!-- Evolución histórica -->
+        <!-- Ritmo por ciclo — vista principal de la evolución.
+             Cada ciclo medido a la misma altura que el actual, que es lo
+             único que los hace comparables: el mes en curso va por la
+             mitad. El stack por categoría vive en el modal. -->
         <article class="bento-caja area-evo">
-          <div class="bento-titulo">Evolución Histórica</div>
+          <div class="bento-titulo">
+            Ritmo por Ciclo
+            <span class="bento-nota" id="evo-panel-nota"></span>
+          </div>
           <div class="chart-container">
             <canvas id="grafico-evolucion"></canvas>
           </div>
           <div style="padding-top:8px; text-align:right;">
             <button id="btn-ver-evolucion" class="btn-accion btn-secundario btn-ver-extracto">
-              Ver evolución →
+              Ver histórico →
             </button>
           </div>
         </article>
@@ -328,11 +334,11 @@
       </div>
 
       <div class="evo-tabs" role="tablist" aria-label="Vista del gráfico">
-        <button class="evo-tab" id="evo-tab-categoria" role="tab" aria-selected="true">
-          Por categoría
-        </button>
-        <button class="evo-tab" id="evo-tab-ritmo" role="tab" aria-selected="false">
+        <button class="evo-tab" id="evo-tab-ritmo" role="tab" aria-selected="true">
           Ritmo a la misma altura
+        </button>
+        <button class="evo-tab" id="evo-tab-categoria" role="tab" aria-selected="false">
+          Por categoría
         </button>
       </div>
 
