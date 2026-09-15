@@ -16,6 +16,8 @@ npx serve -l 3000    # then open http://localhost:3000/
 
 The origin must also be whitelisted once in Supabase → Authentication → URL Configuration → Redirect URLs (`http://localhost:3000` and `http://localhost:3000/**`). That covers magic link; the Google button additionally needs the origin registered in Google Cloud Console, so magic link is the easier local login.
 
+**The symptom when it is missing is not an error — it is a redirect to production.** Both login paths pass `window.location.origin` as `redirectTo`; when that origin is not on the allow-list Supabase silently ignores it and falls back to the project's Site URL, so signing in at `localhost:3000` lands you on the deployed app, looking at production data and wondering why your change isn't there. Nothing in the console says so. If local review appears to "not pick up" a change, check the address bar before the code.
+
 `config.js` is gitignored; you need a local copy with valid Supabase credentials:
 
 ```javascript
@@ -26,7 +28,7 @@ const SHEETS_MIGRATION_URL = '...'; // optional CSV export URL
 const CATEGORIAS_DEFAULT = [ /* copy the array verbatim from build.js */ ];
 ```
 
-`CATEGORIAS_DEFAULT` is not optional locally — `obtenerColorCategoria()` (`app.js`) and `sincronizarCategorias()` (`db.js`) both read it. `SUPABASE_ANON` is the publishable/anon key (public by design, protected by RLS), never the `service_role` key.
+`CATEGORIAS_DEFAULT` used to be load-bearing for chart colours; it no longer is (see *DB Layer*). Its only remaining reader is `sincronizarCategorias()` in `db.js`, so a local `config.js` without it still renders a full dashboard — you just can't seed the category list. Keep it anyway: it costs nothing and the seeding path needs it. `SUPABASE_ANON` is the publishable/anon key (public by design, protected by RLS), never the `service_role` key.
 
 The database schema is **not** applied automatically. Paste the full `schema.sql` into the Supabase Dashboard → SQL Editor once to create the three tables, RLS policies, and the `movimientos_unique_idx` partial index. The seed comments at the bottom of `schema.sql` include the migration to drop the old `UNIQUE` constraint if upgrading an existing instance.
 
@@ -57,7 +59,11 @@ Parser.parsearArchivo({ name: 'x.xlsx', type: '', _path: 'C:/…/statement.xlsx'
 
 `parsearCSVSheets(csvText)` and `normalizarCategoria(raw)` are pure string functions — testable with the eval alone, no `npm i`. The PDF path needs `global.pdfjsLib` (`pdfjs-dist@3.11.174` legacy build) and a file object exposing `arrayBuffer()`; it never calls `FileReader`.
 
+**`ciclos.js` tests the same way and needs no shims at all** — it is a bare IIFE over pure date arithmetic, so `eval(fs.readFileSync('ciclos.js','utf8') + ';Ciclos')` gives you the whole calendar. This is the cheapest way to check anything cycle-related (the inverse `cierreDePeriodo()`, day-of-cycle cut-offs, collision months) before touching the UI. One trap: **`Ciclos` anchors "today" on the local date, not UTC.** With UTC−3 the two differ for three hours a day, so a harness that compares against `new Date().toISOString()` fails overnight — build the expected date from `getFullYear/getMonth/getDate` the way `hoyUTC()` does.
+
 Keep throwaway harnesses and their `node_modules/` **out of the repo** — `.gitignore` covers only `config.js`, `.vercel/`, editor and OS files, so anything installed at the repo root shows up as untracked noise.
+
+**Charts are verified in the browser, and twice by reading pixels rather than options.** A canvas bug can leave the Chart.js config reporting exactly what you intended while the canvas shows something else — the donut legend once had `labels.color: '#7d90a0'` in its options and painted the text pure black. `getImageData()` over the region and a tally of the colours settles it in one call. The layout half has no validator either: label collisions and clipped axes only appear by looking, which is the last step of the `dataviz` skill's procedure and the one that is easy to skip.
 
 Two debugging gotchas worth knowing before chasing a parser bug:
 - **Rows are dropped silently.** `parsearArchivo()` filters out anything without a `fecha` or any amount, and `parsearFecha()` accepts *only* `DD/MM/YY(YY)` (anchored — a value carrying a time component like `15/08/2026 10:30` returns `null` despite the column being headed "Fecha y hora"). A file that parses to zero rows usually means a format change, not an empty file.
@@ -87,7 +93,7 @@ Single `DB` module — but the exported surface is narrower than the function li
 - Utils: `setUserId()`, `getClient()`, `tieneData()` — the last checks if the user has any data (used to show/hide the first-run onboarding banner `#banner-migracion`)
 - **Private, never returned:** `obtenerKPIs()`, `obtenerDistribucion()`, `obtenerTop10()`, `obtenerEvolucion()`, `obtenerCuotas()`, `limpiarNombreComercio()` and `obtenerTodasClasificaciones()` — the last is what `importarMovimientos()` uses to re-apply saved classification rules to freshly imported rows.
 
-Four exported names are never called from `app.js`: `getClient()`, `obtenerExtracto()` (the dashboard payload already carries the extracto), `guardarClasificacion()` (the UI always saves in bulk) and `sincronizarCategorias()` — see below.
+Five exported names are never called from `app.js`: `getClient()` (an escape hatch for console work), `obtenerExtracto()` and `obtenerRitmoHistorico()` (the dashboard payload already carries both results), `guardarClasificacion()` (the UI always saves in bulk) and `sincronizarCategorias()` — see below.
 
 `DB.setUserId(uid)` must be called immediately after auth — all query methods use the stored `userId` to scope their Supabase calls.
 
@@ -119,7 +125,9 @@ Making the note count *everything* so it matches its KPI is not the fix: at day 
 
 `migrarDesdeSheets()` inserts historical movements in batches of 500 with `ignoreDuplicates: true` (maps to `ON CONFLICT DO NOTHING` on the unique index). **This path is currently dormant:** the button and progress bar `ejecutarMigracion()` (in `app.js`) targets are no longer present in `index.html`, so it isn't reachable from the UI — the `?.` guards keep it from erroring. The code remains intact if the migration UI is re-added.
 
-**Nothing seeds the `categorias` table in the current UI.** `sincronizarCategorias()` is its only writer, and its only caller is `migrarDesdeSheets()` — the dormant path above. For a fresh user the table therefore stays empty, `obtenerCategorias()` returns `[]`, and the `colorMap` that `dibujarDashboard()` shares across every chart comes out empty: the donut falls back to `PALETTE.donut` in category order and `dibujarCatTop()` to `#94a3b8`. `schema.sql` has no `INSERT` for it either — its comment claiming the categories are created from the app on first classification is stale. To seed: call `DB.sincronizarCategorias()` once from the console while logged in, or insert the `CATEGORIAS_DEFAULT` rows by hand.
+**Nothing seeds the `categorias` table in the current UI.** `sincronizarCategorias()` is its only writer, and its only caller is `migrarDesdeSheets()` — the dormant path above. `schema.sql` has no `INSERT` for it either; its comment claiming the categories are created from the app on first classification is stale. To seed: call `DB.sincronizarCategorias()` once from the console while logged in, or insert the `CATEGORIAS_DEFAULT` rows by hand.
+
+The **consequence changed with the chart redesign** and the old note here was wrong for a while. Chart colour no longer comes from this table at all — `construirMapaSeries()` derives it from the movements in `datos.evolucion` — so an empty `categorias` renders a perfectly coloured dashboard. What actually breaks is the **classification modal**: `abrirModalClasificar()` is the only remaining consumer, and with no rows its category dropdown comes up empty, so merchants can't be classified. Worth knowing: `obtenerCategorias()` is still inside `obtenerDatosDashboard()`'s `Promise.all` and **nothing reads `datos.categorias`** any more — a query per dashboard load that could be dropped.
 
 ### Database Schema (`schema.sql`)
 
@@ -172,7 +180,21 @@ Three filter lists applied during parsing:
 
 ### App State (`app.js`)
 
-Global variables (no state manager): `mesActivo`, `sessionUsuario`, `extractoTodos`, `extractoPagina` (pagination at 30 rows/page), Chart.js instances (`chartTorta`, `chartTop`, `chartEvo`), `top10Data` (stashed by `dibujarBarras()` so the modal can build its chart later), import state (`movimientosPendientes`, `mesesConDataActual`), and `datosActuales` (last fetched dashboard payload — stored so `toggleTema()` can re-render all charts with new theme colors without re-fetching).
+Global variables, no state manager:
+
+| Global | Holds |
+|---|---|
+| `mesActivo` | the month every panel is drawn for — the header selector sets it |
+| `mesComparacion` | baseline month for the ritmo comparisons; `null` = automatic. `cargarMes()` resets it |
+| `sessionUsuario` | the Supabase session; also the "was there already a session" flag for the auth guard |
+| `datosActuales` | last dashboard payload. `toggleTema()` re-renders every chart from it without re-fetching, and the evolution modal reads it instead of querying |
+| `mapaSeries` / `rankingCategorias` | category → slot colour, and the all-time ranking that assigns the slots |
+| `chartTorta` · `chartTop` · `chartEvo` · `chartEvoModal` | the four Chart.js instances |
+| `top10Data` | stashed by `dibujarBarras()` so the Top-10 modal can build its chart later |
+| `vistaEvolucion` | which tab the evolution modal is on; defaults to `'ritmo'` |
+| `extractoTodos` / `extractoPagina` | statement rows and the 30-per-page cursor |
+| `movimientosPendientes` / `mesesConDataActual` | import awaiting confirmation |
+| `timerCierre` | handle of the midnight timeout that refreshes the countdown |
 
 On load: `bindEventos()` runs first, then `DB.escucharCambiosAuth()` is subscribed, then an existing Supabase session is looked up in localStorage; if none, `?code=` (PKCE) or `#access_token=` (implicit) in the URL is checked before showing the login screen. A 10-second timeout prevents a permanent black screen if the token is expired.
 
@@ -182,7 +204,7 @@ On load: `bindEventos()` runs first, then `DB.escucharCambiosAuth()` is subscrib
 
 **Series color is assigned from a validated 8-slot palette, and it follows the entity rather than the rank.** `SERIES_DARK` / `SERIES_LIGHT` in `app.js` are checked with the `dataviz` skill's `scripts/validate_palette.js` **against this project's own surfaces** (`#080c12` / `#e8eaee`, not the skill's defaults) and pass all six checks in both modes. Do not add, reorder, or hand-pick a hue: the slot order *is* the colorblind-safety mechanism, and any change must be re-validated. The palette this replaced was 14 colors cycled, and failed three checks — most seriously `#5ecf8c`↔`#4fc3c3` (the greens that sat adjacent in the donut) at normal-vision ΔE 9.4 against a floor of 15, plus `--gold` below the chroma floor, i.e. reading as gray and doing no identity work. Gold stays the UI accent and the active-month highlight; it is no longer a series slot.
 
-`construirMapaSeries()` ranks categories by **all-time** spend (from `datos.evolucion`, which covers every period) and hands out slots in that order, so switching months never repaints a surviving category. The 9th category onward folds into `Otros` in gray — never a generated 9th hue, which under CVD would be indistinguishable from one of the eight. `plegarCategorias(items, tope)` does the folding for a single distribution. This also collapsed **three** competing color sources that existed before: the per-user `categorias` colors, `PALETTE.donut`, and a private `fallbacks` array inside `dibujarEvolucion()` — the same category could come out one color in the donut and another in the evolution chart. `obtenerColorCategoria()` (which read `CATEGORIAS_DEFAULT`) is gone with them; `config.js`'s `CATEGORIAS_DEFAULT` is now read only by `sincronizarCategorias()`.
+`construirMapaSeries()` ranks categories by **all-time** spend (from `datos.evolucion`, which covers every period) and hands out slots in that order, so switching months never repaints a surviving category. The 9th category onward folds into `Otros` in gray — never a generated 9th hue, which under CVD would be indistinguishable from one of the eight. `plegarCategorias(items, tope)` does the folding for a single distribution. This also collapsed **three** competing colour sources that used to coexist: the per-user `categorias` colours, a `PALETTE.donut` array, and a private `fallbacks` list inside the evolution chart's own code — so the same category could come out one colour in the donut and another in the evolution chart. `obtenerColorCategoria()` went with them, and `colorCategoria()` is now the only way any surface resolves a category to a colour.
 
 **`PALETTE.surface` is the separator color and must track the theme.** The 2px gap between donut segments and between stacked bars is painted in the surface color — the skill's rule is that white space separates marks, never a stroke around them. It used to be hardcoded `#080c12`, so in light theme the donut drew black rings around every segment.
 
@@ -198,9 +220,9 @@ Two things that were fixed by looking at the render, and will come back if undon
 
 `datosEvolucion(evolucion, tope)` still builds the stack's labels/datasets, now only for the modal (`tope` 8 = 7 categories + `Otros`).
 
-Each of the four Chart.js instances is a module-level global; every render destroys the old instance before creating a new one (`if (chartX) chartX.destroy()`). `chartTorta` (donut) and `chartEvo` (stacked evolution bars) are drawn by `dibujarDashboard`; `chartTop` is built lazily by `dibujarBarrasModal()` only when the Top-10 modal opens (the panel itself just shows a top-5 `<ol>`). The donut carries an inline plugin `pluginTextoCenter` that paints the month total in the hole; the bar charts use the `ChartDataLabels` plugin for value labels.
+Every render destroys the previous instance before building a new one (`if (chartX) chartX.destroy()`). `dibujarDashboard()` draws `chartTorta` (the donut) and `chartEvo` (the **ritmo** bars in the `area-evo` panel — not the category stack, which moved to the modal). The other two are lazy: `chartTop` is built by `dibujarBarrasModal()` when the Top-10 modal opens (the panel itself only shows a top-5 `<ol>`), and `chartEvoModal` by whichever evolution view is on screen. The donut carries an inline plugin `pluginTextoCenter` that paints the month total in the hole; the ritmo charts carry `lineaBase`, which draws the dashed reference line.
 
-`PALETTE` in `app.js` is a **mutable** object holding the active theme's shared colors (`gold`, `cyan`, `green`, `textMuted`, `textMain`, `border`, and the `donut` array); it also seeds `Chart.defaults` (tooltip style, font family).
+`PALETTE` in `app.js` is a **mutable** object holding the active theme's values: `gold`, `cyan`, `green`, `textMuted`, `textMain`, `border`, the `series` slot array, `otros` (the fold-in gray), `surface` (the colour of the gaps between marks) and the `bueno`/`malo` delta tokens. It also seeds `Chart.defaults` (tooltip style, font family, default text colour).
 
 **Light/dark theming** (not backed by the DB): `PALETTES.dark` / `PALETTES.light` hold the two color sets. `aplicarTema(tema)` copies the chosen set into `PALETTE` and updates `Chart.defaults`; `toggleTema()` flips `documentElement.dataset.theme`, persists it to `localStorage['tema']`, and re-renders via `dibujarDashboard(datosActuales)`. The initial theme is applied by an inline IIFE at the **top of `<body>`** in `index.html` (the first thing after the opening tag, so it runs before any content paints) which reads `localStorage['tema']` and stamps both `dataset.theme` and the `!important` background on `documentElement` and `body`.
 
@@ -210,11 +232,22 @@ Each of the four Chart.js instances is a module-level global; every render destr
 
 `Ciclos.cierreVigente()` — not `proximoCierre()` — is what the panel renders. On the closing day itself `cierreDe()` correctly returns the *next* closing (that date belongs to the new cycle), so the count would jump 1 → 28 and the "cierra hoy" branch would be dead code. `cierreVigente()` returns today when `esDiaDeCierre()` is true, which keeps the day count, the date, the range and the progress bar consistent with each other.
 
-`dibujarRitmo(ritmo, meses)` fills the `.panel-ritmo` block that sits under the closing panel (green `▼` when this cycle is running cheaper than the baseline at the same point, red `▲` when it isn't). Unlike `dibujarCierre()` it **does** depend on the selected month, so it is called from `dibujarDashboard()` and follows the month selector. Its own `#ritmo-vs` dropdown picks the baseline: `poblarSelectorRitmo()` fills it from `datos.meses` minus the active month (disabled when that leaves fewer than two), and `cambiarMesComparacion()` re-runs **only** `DB.obtenerRitmo()` and redraws the panel. The choice lives in the `mesComparacion` global and is reset to `null` (automatic) by `cargarMes()` — a hand-picked baseline can be the very month the user just switched to. The sub-label names the month (`menos que Jul 2026`) instead of saying "el mes pasado", which stops being true as soon as the baseline moves. It carries the whole empty-state policy: no previous cycle imported → the panel is hidden outright; no base for a percentage → arrow and amount only. `.panel-cierre` and `.panel-ritmo` share the glass surface rule *and* the cursor-spotlight binding (see Styling).
+`dibujarRitmo(ritmo, meses)` fills the `.panel-ritmo` block that sits under the closing panel (green `▼` when this cycle is running cheaper than the baseline at the same point, red `▲` when it isn't). Unlike `dibujarCierre()` it **does** depend on the selected month, so it is called from `dibujarDashboard()` and follows the month selector. Its own `#ritmo-vs` dropdown picks the baseline: `poblarSelectorRitmo()` fills it from `datos.meses` minus the active month (disabled when that leaves fewer than two), and `cambiarMesComparacion()` re-runs **only** `DB.obtenerRitmo()` and redraws the panel. The choice lives in the `mesComparacion` global and is reset to `null` (automatic) by `cargarMes()` — a hand-picked baseline can be the very month the user just switched to. The sub-label names the month (`menos que julio`) instead of saying "el mes pasado", which stops being true as soon as the baseline moves. It carries the whole empty-state policy: no previous cycle imported → the panel is hidden outright; no base for a percentage → arrow and amount only. `.panel-cierre` and `.panel-ritmo` share the glass surface rule *and* the cursor-spotlight binding (see Styling).
+
+`dibujarNotasComparacion(ritmo)` fills the `.nota-kpi` sentence under the USD and movement KPIs from the same payload, so those follow the `#ritmo-vs` selector too — `cambiarMesComparacion()` calls it alongside `dibujarRitmo()`. See *DB Layer* for what the sentences say and why the movement count deliberately differs from the KPI above it.
 
 `mostrarSkeletons()` / `ocultarSkeletons()` bracket `arrancarDashboard()`. Both early-exit paths (no data at all → `#banner-migracion`, or data but no months) must call `ocultarSkeletons()` or the placeholders stay on screen forever.
 
-Formatting utilities live at the bottom of `app.js`: `formatARS(n, abreviado)` (Argentine peso locale; `abreviado` yields `$1.2M` / `$40k` for axis ticks), `formatFecha(iso)`, `formatearMes(yyyy-mm)`. `obtenerColorCategoria(nombre)` resolves a category's hex color from `CATEGORIAS_DEFAULT` (in `config.js`), case-insensitively, falling back to `#475569` — note it does **not** read the per-user `categorias` table, unlike the `colorMap` the charts build from `datos.categorias`.
+Formatting utilities live at the bottom of `app.js`:
+
+| Helper | Output | Used for |
+|---|---|---|
+| `formatARS(n, abreviado)` | `$ 1.234.567` · `$1.2M` / `$40k` | amounts; the abbreviated form is for axis ticks |
+| `formatPct(n)` | `23,4%`, `120%` past 100 | the decimal is dropped above 100, where it is noise |
+| `formatearMes(p)` | `Ago 2026` | chart axes, where the short form earns its place |
+| `formatearMesNombre(p, ref)` | `agosto` · `diciembre de 2025` | **everything the user reads as prose**, the `#ritmo-vs` dropdown included |
+| `formatFecha(iso)` | `14/03` | statement rows |
+| `colorCategoria(nombre)` | a slot hex, or the `Otros` gray | the single colour source for every chart and the statement dots |
 
 Most DOM event wiring happens in `bindEventos()`, called once on `DOMContentLoaded` before session resolution. The exception: four inline `onclick=` attributes in `index.html` (`cerrarModal()`, `cancelarImportacion()` ×2, `confirmarImportacion()`) — **those four functions must stay global in `app.js`**; there is no bundler or module scope, and the CSP's `script-src 'unsafe-inline'` is what keeps them working.
 
@@ -241,11 +274,11 @@ Single stylesheet, no preprocessor. The design system is "Ethereal Glass": trans
 
 **Charts are governed by the `dataviz` skill.** Before changing any chart — colors, marks, a new chart type — load that skill and follow its procedure; the palette in particular is *computed*, not chosen: run its `scripts/validate_palette.js` against `#080c12` and `#e8eaee` and fix every FAIL before shipping. The current palette's passing run is the reason those eight hexes are what they are.
 
-**Theme colors are duplicated between CSS and JS and must be edited together.** `PALETTES.dark` / `PALETTES.light` in `app.js` hold Chart.js copies of the same accent and text colors as the CSS custom properties (Chart.js paints to canvas and can't read CSS variables). Changing `--gold` in `styles.css` without changing `PALETTES.*.gold` leaves the charts off-palette.
+**Theme colors are duplicated between CSS and JS and must be edited together.** `PALETTES.dark` / `PALETTES.light` in `app.js` hold Chart.js copies of the same accent and text colors as the CSS custom properties (Chart.js paints to canvas and can't read CSS variables). Changing `--gold` in `styles.css` without changing `PALETTES.*.gold` leaves the charts off-palette. The base background exists in **four** places, all of which have to agree: `--bg-base`, the `!important` inline value `toggleTema()` writes on `<body>`, the theme bootstrap at the top of `<body>`, and `PALETTES.*.surface`, which Chart.js needs to paint the gaps between marks.
 
 **This has already drifted once.** `PALETTES.*.textMuted` had fallen a few steps darker than `--text-muted`, putting every chart's axis and legend text at **3.83:1** on the dark surface and 3.95:1 on the light one — under the 4.5:1 that small text needs. The pairs that must stay identical are `textMuted` ↔ `--text-muted`, `textMain` ↔ `--text-main` and `surface` ↔ `--bg-base`. Verify rather than eyeball: `validate_palette.js` exports `contrast(a, b)`, so `contrast('#7d90a0', '#080c12')` settles it in one line. `--green`'s light step was nudged to `#187340` for the same reason — `#1a7a44` measured 4.46:1, four hundredths short.
 
-**A custom `generateLabels` must set `fontColor` itself.** Chart.js v4 uses `legendItem.fontColor` *directly* as the text `fillStyle` and does **not** fall back to `labels.color` when it is missing — the fill is left undefined and the legend paints black, which on the dark surface is invisible. This is what actually made the donut legend unreadable, and it survived a first fix aimed at the token drift above, because the two look identical from the outside. Diagnose this class of bug by reading the pixels, not the options: `getImageData` over the legend area and count the colors — the options said `#7d90a0` while the canvas held 2473 pure-black pixels and not one of the colour it claimed. `toggleTema()` also writes an `!important` inline `background-color` on `<body>` with hardcoded hex values (`#e8eaee` / `#080c12`) that mirror `--bg-base` — and `PALETTES.*.surface` carries the same two values a fourth time, because Chart.js needs them to paint the gaps between marks.
+**A custom `generateLabels` must set `fontColor` itself.** Chart.js v4 uses `legendItem.fontColor` *directly* as the text `fillStyle` and does **not** fall back to `labels.color` when it is missing — the fill is left undefined and the legend paints black, which on the dark surface is invisible. This is what actually made the donut legend unreadable, and it survived a first fix aimed at the token drift above, because the two look identical from the outside. Diagnose this class of bug by reading the pixels, not the options: `getImageData` over the legend area and count the colors — the options said `#7d90a0` while the canvas held 2473 pure-black pixels and not one of the colour it claimed.
 
 **Decorative layers:** `.fondo-luces` (slow-breathing radial orbs via `::before`/`::after`) and `.grain` (fixed film-grain overlay) sit behind the app; both are `pointer-events: none`. `.tarjeta` / `.bento-caja` carry a radial gold spotlight driven by `--spot`, which is `transparent` until `:hover`. Its center reads `--mx`/`--my` (fallback `50% / -10%`), and **those are set by a real mouse-tracking IIFE** — the last inline `<script>` in `index.html`, which binds a `pointermove` listener to every `.tarjeta, .bento-caja, .panel-cierre, .panel-ritmo` and guards re-binding with `dataset.spot`. **A new glass panel must be added to that selector too**, or it keeps the `--spot` gradient with the fallback center and the light looks painted on instead of tracking the cursor — which is how the two wide panels shipped at first. It is intentionally independent of `app.js`; new glass panels created **after** load (modal content, re-rendered rows) are never bound, so they only get the static fallback position.
 
