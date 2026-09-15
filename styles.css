@@ -750,6 +750,17 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
 .nota-kpi.es-mas   { color: var(--red); }
 .nota-kpi[title]   { cursor: help; }
 
+/* Las notas que son una oración van en la tipografía de texto: el mono y el
+   tracking ancho están pensados para cifras alineadas, no para leer una
+   frase corrida. Las cifras exactas quedan en el title. */
+.nota-kpi.nota-frase:not(:empty) {
+  font-family: var(--font-body);
+  font-size: 12px;
+  letter-spacing: normal;
+  font-variant-numeric: normal;
+  line-height: 1.45;
+}
+
 .tarjeta-icon { display: none; }
 
 /* ----------------------------------------------------------------

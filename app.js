@@ -468,7 +468,7 @@ function dibujarRitmo(ritmo, meses = []) {
     // Se nombra el mes en vez de decir "el mes pasado": con el selector la
     // base puede ser cualquiera, y quedaría mintiendo.
     document.getElementById('ritmo-pct-sub').textContent =
-        `${menos ? 'menos' : 'más'} que ${formatearMes(ritmo.mesComparacion)}`;
+        `${menos ? 'menos' : 'más'} que ${formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo)}`;
 
     document.getElementById('ritmo-monto').textContent =
         `${formatARS(Math.abs(ritmo.delta))} ${menos ? 'menos' : 'más'}`;
@@ -476,9 +476,11 @@ function dibujarRitmo(ritmo, meses = []) {
     // El ciclo en curso va en presente ("llevás"); uno ya cerrado, en pasado.
     document.getElementById('ritmo-detalle').textContent = ritmo.enCurso
         ? `Llevás ${formatARS(ritmo.actual)} en este ciclo, contra ` +
-          `${formatARS(ritmo.anterior)} de ${formatearMes(ritmo.mesComparacion)} en el mismo tramo.`
-        : `Gastaste ${formatARS(ritmo.actual)} en ${formatearMes(ritmo.mesPeriodo)}, contra ` +
-          `${formatARS(ritmo.anterior)} de ${formatearMes(ritmo.mesComparacion)}, ciclo completo.`;
+          `${formatARS(ritmo.anterior)} de ${formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo)} ` +
+          `en el mismo tramo.`
+        : `Gastaste ${formatARS(ritmo.actual)} en ${formatearMesNombre(ritmo.mesPeriodo)}, contra ` +
+          `${formatARS(ritmo.anterior)} de ${formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo)}, ` +
+          `ciclo completo.`;
 
     document.getElementById('ritmo-rango').textContent = ritmo.enCurso
         ? `día ${ritmo.dia} de ${ritmo.diasCiclo}`
@@ -495,7 +497,13 @@ function dibujarRitmo(ritmo, meses = []) {
 // preguntas distintas y el `title` lo aclara al pasar el mouse.
 // ----------------------------------------------------------------
 function dibujarNotasComparacion(ritmo) {
-    const pintar = (id, v, fmt, unidad, cola, sufijo) => {
+    // Porcentaje redondeado a entero: la precisión decimal no cambia ninguna
+    // decisión y en una frase se lee peor. Abajo del 1% no se dice un número,
+    // porque "0%" sonaría a que no hubo diferencia cuando sí la hubo.
+    const casiIgual = pct => pct !== null && Math.abs(pct) < 1;
+    const pctEntero = pct => `${Math.round(Math.abs(pct))}%`;
+
+    const pintar = (id, v, frase, fmt, unidad, sufijo) => {
         const el = document.getElementById(id);
         if (!el) return;
 
@@ -512,31 +520,36 @@ function dibujarNotasComparacion(ritmo) {
         const menos = v.delta < 0;
         el.classList.add(menos ? 'es-menos' : 'es-mas');
 
-        // La nota muestra LOS DOS valores que compara, no sólo la diferencia.
-        // Con la variación sola el lector no tiene forma de saber contra qué
-        // se está midiendo: el conteo de movimientos, por ejemplo, no coincide
-        // con el número grande de arriba —ese cuenta todas las filas del mes,
-        // este sólo las del ciclo hasta el corte— y sin la base a la vista eso
-        // parece un error de cálculo en vez de una medida distinta.
-        const pct = v.pct === null ? '' : `${formatPct(Math.abs(v.pct))} · `;
-        const par = `${unidad}${fmt(v.actual)} vs ${fmt(v.anterior)}${cola}`;
+        const mes = formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo);
+        el.textContent = frase(v, menos, mes, ritmo.enCurso);
 
-        el.textContent = `${menos ? '▼' : '▲'} ${pct}${par} · ${formatearMes(ritmo.mesComparacion)}`;
-
+        // Los números exactos y la advertencia sobre la base viven acá: la
+        // frase queda limpia y el detalle sigue estando a un hover.
         el.title = ritmo.enCurso
             ? `${unidad}${fmt(v.actual)} en este ciclo contra ${unidad}${fmt(v.anterior)} de ` +
-              `${formatearMes(ritmo.mesComparacion)} al mismo día (${ritmo.dia} de ${ritmo.diasCiclo}). ${sufijo}`
+              `${mes} al mismo día (${ritmo.dia} de ${ritmo.diasCiclo}). ${sufijo}`
             : `${unidad}${fmt(v.actual)} contra ${unidad}${fmt(v.anterior)}, ciclos completos. ${sufijo}`;
     };
 
     pintar('val-usd-nota', ritmo?.usd,
+        (v, menos, mes, enCurso) => {
+            const verbo = enCurso ? 'Vas gastando' : 'Gastaste';
+            if (v.pct === null)  return `En ${mes} no hubo consumo para comparar`;
+            if (casiIgual(v.pct)) return `${verbo} prácticamente lo mismo que en ${mes}`;
+            return `${verbo} ${pctEntero(v.pct)} ${menos ? 'menos' : 'más'} que en ${mes}`;
+        },
         n => n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        'u$s ', '',
+        'u$s ',
         'Sólo consumo del ciclo, sin cuotas ni créditos.');
 
     pintar('val-mov-nota', ritmo?.movimientos,
+        (v, menos, mes) => {
+            if (v.pct === null)  return `En ${mes} no hubo movimientos para comparar`;
+            if (casiIgual(v.pct)) return `Tuviste casi los mismos movimientos que en ${mes}`;
+            return `Tuviste ${pctEntero(v.pct)} ${menos ? 'menos' : 'más'} movimientos que en ${mes}`;
+        },
         n => String(Math.round(n)),
-        '', ' mov',
+        '',
         'Cuenta sólo los movimientos del ciclo hasta el corte, por eso no coincide con el total del mes que muestra el KPI.');
 }
 
@@ -552,9 +565,10 @@ function poblarSelectorRitmo(meses, mesElegido) {
     opciones.forEach(m => {
         const op = document.createElement('option');
         op.value = m;
-        // El mes que resolvió el modo automático se marca, así se ve que
-        // es el ciclo anterior y no una elección del usuario.
-        op.textContent = `vs ${formatearMes(m)}`;
+        // Mismo nombre de mes que usan las frases del dashboard: si el
+        // control dijera "Ago 2026" y el texto "agosto", parecerían dos
+        // cosas distintas.
+        op.textContent = `vs ${formatearMesNombre(m)}`;
         sel.appendChild(op);
     });
 
@@ -1884,6 +1898,19 @@ function formatPct(valor) {
     return valor.toLocaleString('es-AR', {
         minimumFractionDigits: dec, maximumFractionDigits: dec,
     }) + '%';
+}
+
+// '2026-08' → 'agosto'. Si el año no es el del mes que se está mirando lo
+// agrega ('diciembre de 2025'), para que un diciembre no se confunda con
+// el otro cuando la historia pasa de un año.
+const NOMBRES_MES = ['enero','febrero','marzo','abril','mayo','junio',
+                     'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+function formatearMesNombre(periodo, referencia) {
+    if (!periodo) return '';
+    const [anio, mes] = periodo.split('-');
+    const nombre = NOMBRES_MES[parseInt(mes, 10) - 1] || periodo;
+    return referencia && referencia.split('-')[0] === anio ? nombre : `${nombre} de ${anio}`;
 }
 
 function formatearMes(periodo) {
