@@ -748,7 +748,6 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
    en todo el dashboard. */
 .nota-kpi.es-menos { color: var(--green); }
 .nota-kpi.es-mas   { color: var(--red); }
-.nota-kpi[title]   { cursor: help; }
 
 /* Las notas que son una oración van en la tipografía de texto: el mono y el
    tracking ancho están pensados para cifras alineadas, no para leer una

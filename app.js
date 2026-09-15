@@ -503,7 +503,7 @@ function dibujarNotasComparacion(ritmo) {
     const casiIgual = pct => pct !== null && Math.abs(pct) < 1;
     const pctEntero = pct => `${Math.round(Math.abs(pct))}%`;
 
-    const pintar = (id, v, frase, fmt, unidad, sufijo) => {
+    const pintar = (id, v, frase, fmt, unidad) => {
         const el = document.getElementById(id);
         if (!el) return;
 
@@ -513,22 +513,22 @@ function dibujarNotasComparacion(ritmo) {
         // colapsa solo.
         if (!ritmo || !ritmo.hayComparacion || !v || v.delta === undefined) {
             el.textContent = '';
-            el.removeAttribute('title');
             return;
         }
 
         const menos = v.delta < 0;
         el.classList.add(menos ? 'es-menos' : 'es-mas');
 
-        const mes = formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo);
-        el.textContent = frase(v, menos, mes, ritmo.enCurso);
+        const mes   = formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo);
+        const texto = frase(v, menos, mes, ritmo.enCurso);
 
-        // Los números exactos y la advertencia sobre la base viven acá: la
-        // frase queda limpia y el detalle sigue estando a un hover.
-        el.title = ritmo.enCurso
-            ? `${unidad}${fmt(v.actual)} en este ciclo contra ${unidad}${fmt(v.anterior)} de ` +
-              `${mes} al mismo día (${ritmo.dia} de ${ritmo.diasCiclo}). ${sufijo}`
-            : `${unidad}${fmt(v.actual)} contra ${unidad}${fmt(v.anterior)}, ciclos completos. ${sufijo}`;
+        // Entre paréntesis, el número contra el que se compara. Va a la
+        // vista y no escondido en un hover: el porcentaje solo no dice
+        // sobre qué base está calculado. Cuando no hay base el texto ya lo
+        // dice con todas las letras, así que ahí no se agrega nada.
+        el.textContent = v.pct === null
+            ? texto
+            : `${texto} (${unidad}${fmt(v.anterior)})`;
     };
 
     pintar('val-usd-nota', ritmo?.usd,
@@ -539,8 +539,9 @@ function dibujarNotasComparacion(ritmo) {
             return `${verbo} ${pctEntero(v.pct)} ${menos ? 'menos' : 'más'} que en ${mes}`;
         },
         n => n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        'u$s ',
-        'Sólo consumo del ciclo, sin cuotas ni créditos.');
+        // Espacio duro: con un monto largo la frase envuelve, y sin esto
+        // "u$s" queda en un renglón y la cifra en el siguiente.
+        'u$s ');
 
     pintar('val-mov-nota', ritmo?.movimientos,
         (v, menos, mes) => {
@@ -549,8 +550,7 @@ function dibujarNotasComparacion(ritmo) {
             return `Tuviste ${pctEntero(v.pct)} ${menos ? 'menos' : 'más'} movimientos que en ${mes}`;
         },
         n => String(Math.round(n)),
-        '',
-        'Cuenta sólo los movimientos del ciclo hasta el corte, por eso no coincide con el total del mes que muestra el KPI.');
+        '');
 }
 
 // Llena el selector con los meses que tienen datos, salvo el que se está
