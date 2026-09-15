@@ -489,7 +489,10 @@
   <script>
     (function () {
       function bindSpotlight() {
-        document.querySelectorAll('.tarjeta, .bento-caja').forEach(function (card) {
+        // Los dos paneles anchos comparten la superficie de vidrio y su
+        // gradiente --spot, pero antes no entraban acá: se quedaban con la
+        // posición de fallback (50% / -10%) y la luz parecía pintada.
+        document.querySelectorAll('.tarjeta, .bento-caja, .panel-cierre, .panel-ritmo').forEach(function (card) {
           if (card.dataset.spot) return;
           card.dataset.spot = '1';
           card.addEventListener('pointermove', function (e) {
