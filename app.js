@@ -529,8 +529,8 @@ function marcarModoRitmo() {
 // NOTAS DE COMPARACIÓN BAJO LOS KPI DE USD Y DE MOVIMIENTOS
 //
 // Misma lógica que el panel de ritmo y contra el mismo mes que elija su
-// selector: consumo del ciclo hasta el mismo día, sin cuotas arrastradas
-// ni créditos. Por eso el conteo de movimientos de la nota no coincide con
+// selector: consumo hasta el mismo día más las cuotas que factura el mes,
+// sin créditos. Por eso el conteo de movimientos de la nota no coincide con
 // el número grande del KPI, que cuenta todas las filas del mes — son dos
 // preguntas distintas y el `title` lo aclara al pasar el mouse.
 // ----------------------------------------------------------------
@@ -1216,7 +1216,7 @@ function dibujarEvoRitmo() {
         : `Consumo de cada ciclo completo (${rh.diasCiclo} días).`;
 
     nota.textContent = `${encabezado} La línea punteada marca ${formatearMes(rh.mesActivo)}: ` +
-        `${formatARS(rh.base)}. Sólo consumo del ciclo: sin cuotas arrastradas ni créditos.`;
+        `${formatARS(rh.base)}. Incluye las cuotas que factura cada ciclo; los créditos quedan afuera.`;
 
     chartEvoModal = construirChartRitmo('grafico-evo-modal', rh, { compacto: false });
     tablaRitmo(rh.meses);

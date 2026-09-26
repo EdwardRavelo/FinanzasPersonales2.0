@@ -270,10 +270,12 @@ const DB = (() => {
     // ----------------------------------------------------------------
     // RITMO DE GASTO — este ciclo contra otro, a la misma altura
     //
-    // Compara SÓLO consumo del ciclo (cuota_actual null o 1). Las cuotas
-    // arrastradas son un peso fijo de compras viejas y no dependen de lo
-    // que se gaste hoy: en el resumen de agosto eran el 65% del total y
-    // tapaban por completo la señal.
+    // Compara TODO el consumo facturado, cuotas incluidas. Se las había
+    // dejado afuera por ser un peso fijo de compras viejas, pero eso hacía
+    // que un mes cargado de cuotas (agosto: 11) pareciera más barato que uno
+    // con pocas. Una cuota arrastrada (cuota > 1) lleva la fecha de la
+    // compra original, así que no se puede cortar por día: cuenta entera en
+    // el mes que la factura, en los dos modos. Los créditos siguen afuera.
     //
     // El corte es por DÍA DEL CICLO, no por fecha calendario: si hoy es el
     // día 15 del ciclo, se suman los primeros 15 días de cada uno. Si el
@@ -363,8 +365,8 @@ const DB = (() => {
         // igual que la de fechas y evita construir un Date por fila.
         // Un solo recorrido devuelve las tres medidas del tramo: pesos,
         // dólares y cantidad de movimientos. Las tres usan el mismo filtro
-        // —consumo del ciclo, sin créditos ni cuotas arrastradas— para que
-        // el porcentaje signifique lo mismo en los tres KPIs.
+        // —consumo facturado con cuotas, sin créditos— para que el
+        // porcentaje signifique lo mismo en los tres KPIs.
         const medir = (mes, inicio, corte) => data.reduce((acc, m) => {
             if (m.mes_periodo !== mes) return acc;
 
@@ -372,9 +374,12 @@ const DB = (() => {
             const usd = m.monto_usd != null ? parseFloat(m.monto_usd) : 0;
 
             if (m.es_reintegro || ars < 0 || usd < 0) return acc;   // créditos afuera
-            if (m.cuota_actual > 1)                   return acc;   // arrastre de ciclos viejos
-            if (!m.fecha || m.fecha >= corte)         return acc;   // ese día aún no llegó
-            if (m.fecha < inicio)                     return acc;   // de otro ciclo
+            // Cuota arrastrada: su fecha es la de la compra original, así
+            // que entra entera sin mirar el corte del día.
+            if (!(m.cuota_actual > 1)) {
+                if (!m.fecha || m.fecha >= corte)     return acc;   // ese día aún no llegó
+                if (m.fecha < inicio)                 return acc;   // de otro ciclo
+            }
 
             acc.ars += ars;
             acc.usd += usd;
@@ -464,9 +469,11 @@ const DB = (() => {
 
             const ars = m.monto_ars != null ? parseFloat(m.monto_ars) : 0;
             if (m.es_reintegro || ars < 0)    return;   // créditos afuera
-            if (m.cuota_actual > 1)           return;   // arrastre de ciclos viejos
-            if (!m.fecha || m.fecha >= cortes[mes].corte) return;
-            if (m.fecha < cortes[mes].inicio) return;   // de otro ciclo (ver obtenerRitmo)
+            // Cuotas arrastradas: enteras, sin corte (ver obtenerRitmo)
+            if (!(m.cuota_actual > 1)) {
+                if (!m.fecha || m.fecha >= cortes[mes].corte) return;
+                if (m.fecha < cortes[mes].inicio) return;   // de otro ciclo
+            }
             acum[mes] += ars;
         });
 
