@@ -289,7 +289,8 @@ const DB = (() => {
     //  - 'dia'   (default) la base se corta al mismo día del ciclo.
     //  - 'total' la base es su ciclo COMPLETO: "cuánto llevo de lo que gasté
     //    en todo septiembre". El mes activo se sigue cortando a hoy.
-    // Con el mes activo ya cerrado los dos modos coinciden (28 vs 28).
+    // Con el mes activo ya cerrado, 'total' compara los dos ciclos enteros y
+    // 'dia' los corta al día que va hoy el ciclo en curso.
     //
     // Las filas se cuentan sólo dentro de [inicio del ciclo, corte): sin el
     // límite inferior, un mes que por error guardó movimientos de ciclos
@@ -313,8 +314,18 @@ const DB = (() => {
         const mesBase = Ciclos.periodoDe(Ciclos.rangoDe(cierreBase).desde);
         if (!mesBase || mesBase === mesPeriodo) return null;
 
-        const dia = Ciclos.diaDelCiclo(cierre);
-        if (dia < 1) return null;               // ciclo futuro: nada que comparar
+        const diaPropio = Ciclos.diaDelCiclo(cierre);
+        if (diaPropio < 1) return null;         // ciclo futuro: nada que comparar
+        const enCurso = diaPropio < Ciclos.DIAS_CICLO;
+
+        // Día de corte. Con el mes activo abierto es su día de hoy. Con el
+        // mes activo cerrado, 'dia' corta los dos ciclos en el día que va
+        // hoy el ciclo en curso ("al día 3, septiembre llevaba…"), para que
+        // el modo signifique algo distinto de 'total', que los compara
+        // enteros. El día de cierre cierreVigente() da el día 28: completo.
+        const dia = enCurso || modo === 'total'
+            ? diaPropio
+            : Ciclos.diaDelCiclo(Ciclos.cierreVigente()) || Ciclos.DIAS_CICLO;
 
         const corteActual = Ciclos.corteDelCiclo(cierre, dia);
         const corteBase   = Ciclos.corteDelCiclo(cierreBase,
@@ -386,7 +397,7 @@ const DB = (() => {
             mesPeriodo,
             mesComparacion: mesBase,
             hayComparacion: data.some(m => m.mes_periodo === mesBase),
-            enCurso:        dia < Ciclos.DIAS_CICLO,
+            enCurso,
             modo,
             dia,
             diasCiclo:   Ciclos.DIAS_CICLO,

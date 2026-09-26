@@ -459,16 +459,21 @@ function dibujarRitmo(ritmo, meses = []) {
     panel.style.display = '';
 
     poblarSelectorRitmo(meses, ritmo.mesComparacion);
-    marcarModoRitmo(ritmo);
+    marcarModoRitmo();
 
     const menos = ritmo.delta < 0;
     panel.classList.toggle('es-menos',  menos);
     panel.classList.toggle('es-mas',   !menos);
 
-    // Contra el mes completo sólo cuando el activo sigue abierto: con los dos
-    // cerrados ya se comparan ciclos enteros y los dos modos dicen lo mismo.
-    const contraTotal = ritmo.modo === 'total' && ritmo.enCurso;
-    const mesBase     = formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo);
+    // Cuatro lecturas: activo abierto o cerrado × base al mismo día o completa.
+    //  - abierto + total   → lo que va del ciclo contra todo el mes base
+    //  - abierto + día     → los dos cortados a hoy
+    //  - cerrado + día     → los dos cortados al día que va el ciclo en curso
+    //  - cerrado + total   → los dos ciclos enteros
+    const contraTotal  = ritmo.modo === 'total' && ritmo.enCurso;
+    const cerradoAlDia = !ritmo.enCurso && ritmo.dia < ritmo.diasCiclo;
+    const mesBase      = formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo);
+    const mesActivoTxt = formatearMesNombre(ritmo.mesPeriodo);
 
     // pct viene null cuando el ciclo anterior no tuvo consumo en el tramo:
     // sería una división por cero, así que se informa sólo el monto.
@@ -496,23 +501,26 @@ function dibujarRitmo(ritmo, meses = []) {
         : ritmo.enCurso
         ? `Llevás ${formatARS(ritmo.actual)} en este ciclo, contra ` +
           `${formatARS(ritmo.anterior)} de ${mesBase} en el mismo tramo.`
-        : `Gastaste ${formatARS(ritmo.actual)} en ${formatearMesNombre(ritmo.mesPeriodo)}, contra ` +
+        : cerradoAlDia
+        ? `A los ${ritmo.dia} días del ciclo, en ${mesActivoTxt} llevabas ${formatARS(ritmo.actual)}, ` +
+          `contra ${formatARS(ritmo.anterior)} de ${mesBase} en el mismo tramo.`
+        : `Gastaste ${formatARS(ritmo.actual)} en ${mesActivoTxt}, contra ` +
           `${formatARS(ritmo.anterior)} de ${mesBase}, ciclo completo.`;
 
     document.getElementById('ritmo-rango').textContent = contraTotal
         ? `día ${ritmo.dia} de ${ritmo.diasCiclo} · contra ${mesBase} completo`
         : ritmo.enCurso
         ? `día ${ritmo.dia} de ${ritmo.diasCiclo}`
+        : cerradoAlDia
+        ? `día ${ritmo.dia} de ${ritmo.diasCiclo} · el mismo día que hoy`
         : `ciclo completo · ${ritmo.diasCiclo} días`;
 }
 
-// Estado visual del conmutador "mismo día / mes completo". Con el mes
-// activo cerrado no hay nada que elegir (los dos modos coinciden), así que
-// se esconde en vez de ofrecer un botón que no cambia nada.
-function marcarModoRitmo(ritmo) {
-    const grupo = document.getElementById('ritmo-modos');
-    if (!grupo) return;
-    grupo.style.display = ritmo?.enCurso ? '' : 'none';
+// Estado visual del conmutador "mismo día / mes completo". Está en todos
+// los meses: en uno cerrado, "mismo día" corta al día que va hoy el ciclo
+// en curso y "mes completo" compara los dos ciclos enteros.
+function marcarModoRitmo() {
+    if (!document.getElementById('ritmo-modos')) return;
     document.getElementById('ritmo-modo-dia')?.setAttribute('aria-pressed',   String(modoRitmo === 'dia'));
     document.getElementById('ritmo-modo-total')?.setAttribute('aria-pressed', String(modoRitmo === 'total'));
 }
@@ -552,7 +560,12 @@ function dibujarNotasComparacion(ritmo) {
         // Contra el mes completo la base es el ciclo entero: "todo agosto".
         const todo  = ritmo.modo === 'total' && ritmo.enCurso ? 'todo ' : '';
         const mes   = todo + formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo);
-        const texto = frase(v, menos, mes, ritmo.enCurso);
+        // Un mes cerrado cortado al mismo día tiene que decirlo, o "Gastaste
+        // 12% más" se leería como el ciclo entero.
+        const frasePropia = frase(v, menos, mes, ritmo.enCurso);
+        const texto = !ritmo.enCurso && ritmo.dia < ritmo.diasCiclo
+            ? `Al día ${ritmo.dia}, ${frasePropia.charAt(0).toLowerCase()}${frasePropia.slice(1)}`
+            : frasePropia;
 
         // Entre paréntesis, el número contra el que se compara. Va a la
         // vista y no escondido en un hover: el porcentaje solo no dice
@@ -633,7 +646,7 @@ function cambiarModoRitmo(modo) {
     if (modo === modoRitmo) return;
     modoRitmo = modo;
     try { localStorage.setItem('modoRitmo', modo); } catch (_) { /* sin storage: vale para esta visita */ }
-    marcarModoRitmo(datosActuales?.ritmo);
+    marcarModoRitmo();
     cambiarMesComparacion(mesComparacion);
 }
 
