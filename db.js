@@ -283,9 +283,19 @@ const DB = (() => {
     // calendario y no de la lista de meses con datos; si ese ciclo nunca se
     // importó se cae al mes con datos más reciente en vez de comparar
     // contra cero y cantar un -100%. Pasando `mesComparacion` se compara
-    // contra cualquier otro mes cargado, siempre al mismo día del ciclo.
+    // contra cualquier otro mes cargado.
+    //
+    // `modo` elige la vara de la base:
+    //  - 'dia'   (default) la base se corta al mismo día del ciclo.
+    //  - 'total' la base es su ciclo COMPLETO: "cuánto llevo de lo que gasté
+    //    en todo septiembre". El mes activo se sigue cortando a hoy.
+    // Con el mes activo ya cerrado los dos modos coinciden (28 vs 28).
+    //
+    // Las filas se cuentan sólo dentro de [inicio del ciclo, corte): sin el
+    // límite inferior, un mes que por error guardó movimientos de ciclos
+    // anteriores los sumaba todos como si fueran de sus primeros días.
     // ----------------------------------------------------------------
-    async function obtenerRitmo(mesPeriodo, mesComparacion) {
+    async function obtenerRitmo(mesPeriodo, mesComparacion, modo = 'dia') {
         if (typeof Ciclos === 'undefined') return null;
 
         const cierre = Ciclos.cierreDePeriodo(mesPeriodo);
@@ -306,8 +316,11 @@ const DB = (() => {
         const dia = Ciclos.diaDelCiclo(cierre);
         if (dia < 1) return null;               // ciclo futuro: nada que comparar
 
-        const corteActual = Ciclos.corteDelCiclo(cierre,     dia);
-        const corteBase   = Ciclos.corteDelCiclo(cierreBase, dia);
+        const corteActual = Ciclos.corteDelCiclo(cierre, dia);
+        const corteBase   = Ciclos.corteDelCiclo(cierreBase,
+            modo === 'total' ? Ciclos.DIAS_CICLO : dia);
+        const inicioActual = Ciclos.rangoDe(cierre).desde;
+        const inicioBase   = Ciclos.rangoDe(cierreBase).desde;
 
         const { data, error } = await supabase
             .from('movimientos')
@@ -331,7 +344,7 @@ const DB = (() => {
                 .limit(1);
 
             if (previos && previos.length) {
-                return obtenerRitmo(mesPeriodo, previos[0].mes_periodo);
+                return obtenerRitmo(mesPeriodo, previos[0].mes_periodo, modo);
             }
         }
 
@@ -341,7 +354,7 @@ const DB = (() => {
         // dólares y cantidad de movimientos. Las tres usan el mismo filtro
         // —consumo del ciclo, sin créditos ni cuotas arrastradas— para que
         // el porcentaje signifique lo mismo en los tres KPIs.
-        const medir = (mes, corte) => data.reduce((acc, m) => {
+        const medir = (mes, inicio, corte) => data.reduce((acc, m) => {
             if (m.mes_periodo !== mes) return acc;
 
             const ars = m.monto_ars != null ? parseFloat(m.monto_ars) : 0;
@@ -350,6 +363,7 @@ const DB = (() => {
             if (m.es_reintegro || ars < 0 || usd < 0) return acc;   // créditos afuera
             if (m.cuota_actual > 1)                   return acc;   // arrastre de ciclos viejos
             if (!m.fecha || m.fecha >= corte)         return acc;   // ese día aún no llegó
+            if (m.fecha < inicio)                     return acc;   // de otro ciclo
 
             acc.ars += ars;
             acc.usd += usd;
@@ -357,8 +371,8 @@ const DB = (() => {
             return acc;
         }, { ars: 0, usd: 0, movimientos: 0 });
 
-        const a = medir(mesPeriodo, corteActual);
-        const b = medir(mesBase,    corteBase);
+        const a = medir(mesPeriodo, inicioActual, corteActual);
+        const b = medir(mesBase,    inicioBase,   corteBase);
 
         // Sin base no hay porcentaje: se informa sólo la diferencia absoluta.
         const variacion = (ahora, antes) => ({
@@ -373,6 +387,7 @@ const DB = (() => {
             mesComparacion: mesBase,
             hayComparacion: data.some(m => m.mes_periodo === mesBase),
             enCurso:        dia < Ciclos.DIAS_CICLO,
+            modo,
             dia,
             diasCiclo:   Ciclos.DIAS_CICLO,
             // Campos planos de pesos: los consume el panel de ritmo, que ya
@@ -429,7 +444,9 @@ const DB = (() => {
             const mes = m.mes_periodo;
             if (!(mes in cortes)) {
                 const c     = Ciclos.cierreDePeriodo(mes);
-                cortes[mes] = c ? Ciclos.corteDelCiclo(c, dia) : null;
+                cortes[mes] = c
+                    ? { inicio: Ciclos.rangoDe(c).desde, corte: Ciclos.corteDelCiclo(c, dia) }
+                    : null;
                 acum[mes]   = 0;
             }
             if (!cortes[mes]) return;
@@ -437,7 +454,8 @@ const DB = (() => {
             const ars = m.monto_ars != null ? parseFloat(m.monto_ars) : 0;
             if (m.es_reintegro || ars < 0)    return;   // créditos afuera
             if (m.cuota_actual > 1)           return;   // arrastre de ciclos viejos
-            if (!m.fecha || m.fecha >= cortes[mes]) return;
+            if (!m.fecha || m.fecha >= cortes[mes].corte) return;
+            if (m.fecha < cortes[mes].inicio) return;   // de otro ciclo (ver obtenerRitmo)
             acum[mes] += ars;
         });
 
@@ -463,7 +481,8 @@ const DB = (() => {
     // ----------------------------------------------------------------
     // OBTENER TODOS LOS DATOS DEL DASHBOARD en paralelo
     // ----------------------------------------------------------------
-    async function obtenerDatosDashboard(mesPeriodo) {
+    // `modoRitmo` ('dia' | 'total') es la vara del panel de ritmo; ver obtenerRitmo().
+    async function obtenerDatosDashboard(mesPeriodo, modoRitmo = 'dia') {
         const [meses, kpis, distribucion, top10, evolucion, cuotas, extracto, categorias,
                ritmo, ritmoHistorico] =
             await Promise.all([
@@ -475,7 +494,7 @@ const DB = (() => {
                 obtenerCuotas(mesPeriodo),
                 obtenerExtracto(mesPeriodo),
                 obtenerCategorias(),
-                obtenerRitmo(mesPeriodo),
+                obtenerRitmo(mesPeriodo, null, modoRitmo),
                 // Desde que el ritmo es la vista principal del panel de
                 // evolución, se necesita en cada carga y ya no alcanza con
                 // pedirlo al abrir el modal.
@@ -488,10 +507,12 @@ const DB = (() => {
 
     // ----------------------------------------------------------------
     // IMPORTAR MOVIMIENTOS (desde .xlsx parseado)
-    // El XLSX es la fuente de verdad para el mes: reemplaza todas las
-    // filas existentes de ese mes_periodo. Esto evita el problema de
+    // El XLSX es la fuente de verdad para cada mes que trae: reemplaza todas
+    // las filas existentes de esos mes_periodo. Esto evita el problema de
     // montos redondeados en Sheets vs exactos en XLSX que burla el dedup.
-    // Los meses históricos (no incluidos en el archivo) no se tocan.
+    // Un archivo puede traer dos meses (el feed sigue mostrando el ciclo
+    // recién cerrado unos días): se reemplazan los dos. Los meses que el
+    // archivo no trae no se tocan.
     // ----------------------------------------------------------------
     async function importarMovimientos(movimientos) {
         if (!movimientos.length) return { insertados: 0, duplicados: 0 };
@@ -509,15 +530,15 @@ const DB = (() => {
             };
         });
 
-        const mesPeriodo = movConClasif[0]?.mes_periodo;
-        if (!mesPeriodo) return { insertados: 0, duplicados: 0 };
+        const meses = [...new Set(movConClasif.map(m => m.mes_periodo).filter(Boolean))];
+        if (!meses.length) return { insertados: 0, duplicados: 0 };
 
-        // Borrar todas las filas existentes del mes para reemplazar con el XLSX
+        // Borrar todas las filas existentes de esos meses para reemplazar con el XLSX
         const { error: errDel } = await supabase
             .from('movimientos')
             .delete()
             .eq('user_id', userId)
-            .eq('mes_periodo', mesPeriodo);
+            .in('mes_periodo', meses);
 
         if (errDel) throw errDel;
 

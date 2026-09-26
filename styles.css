@@ -651,6 +651,42 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
   max-width: 190px;
 }
 .ritmo-select:hover, .ritmo-select:focus { border-color: var(--gold); box-shadow: none; }
+
+/* Conmutador "mismo día / mes completo" + selector de mes: van juntos al
+   final del encabezado y, si no entran, bajan juntos alineados a la derecha. */
+.ritmo-controles {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+.ritmo-controles .ritmo-select { margin-left: 0; }
+.ritmo-modos {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+}
+.ritmo-modo {
+  padding: 5px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  border: none;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.25s var(--ease), background-color 0.25s var(--ease);
+}
+.ritmo-modo:hover { color: var(--text-main); }
+.ritmo-modo[aria-pressed="true"] {
+  background: var(--gold);
+  color: var(--bg-base);
+  font-weight: 500;
+}
 .ritmo-select option { background-color: var(--bg-surface); color: var(--text-main); }
 
 .ritmo-detalle {
@@ -1199,6 +1235,18 @@ select option { background-color: var(--bg-surface); color: var(--text-main); }
   font-family: var(--font-body); font-size: 0.9rem; color: var(--red);
   line-height: 1.5; display: flex; align-items: flex-start; gap: 8px;
 }
+.import-desglose {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.import-desglose strong { color: var(--gold); font-weight: 500; }
 .import-acciones { display: flex; gap: 12px; justify-content: flex-end; }
 
 /* ----------------------------------------------------------------

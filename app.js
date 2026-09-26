@@ -10,6 +10,11 @@ let mesActivo        = null;
 // Mes contra el que compara el panel de ritmo. null = automático (el ciclo
 // anterior, o el mes con datos más reciente si ese no se importó).
 let mesComparacion   = null;
+// Vara de la comparación: 'dia' = la base cortada al mismo día del ciclo,
+// 'total' = la base es su ciclo completo. A diferencia de mesComparacion no
+// se resetea al cambiar de mes: es una preferencia de lectura, no una
+// elección atada a un mes. Se recuerda entre visitas.
+let modoRitmo        = leerModoRitmo();
 let chartTorta       = null;
 let chartTop         = null;
 let chartEvo         = null;
@@ -342,7 +347,7 @@ async function cargarMes(mes) {
     mostrarSkeletons();
 
     try {
-        const datos = await DB.obtenerDatosDashboard(mes);
+        const datos = await DB.obtenerDatosDashboard(mes, modoRitmo);
         dibujarDashboard(datos);
     } catch (err) {
         console.error('Error al cargar mes:', err);
@@ -454,10 +459,16 @@ function dibujarRitmo(ritmo, meses = []) {
     panel.style.display = '';
 
     poblarSelectorRitmo(meses, ritmo.mesComparacion);
+    marcarModoRitmo(ritmo);
 
     const menos = ritmo.delta < 0;
     panel.classList.toggle('es-menos',  menos);
     panel.classList.toggle('es-mas',   !menos);
+
+    // Contra el mes completo sólo cuando el activo sigue abierto: con los dos
+    // cerrados ya se comparan ciclos enteros y los dos modos dicen lo mismo.
+    const contraTotal = ritmo.modo === 'total' && ritmo.enCurso;
+    const mesBase     = formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo);
 
     // pct viene null cuando el ciclo anterior no tuvo consumo en el tramo:
     // sería una división por cero, así que se informa sólo el monto.
@@ -468,23 +479,42 @@ function dibujarRitmo(ritmo, meses = []) {
     // Se nombra el mes en vez de decir "el mes pasado": con el selector la
     // base puede ser cualquiera, y quedaría mintiendo.
     document.getElementById('ritmo-pct-sub').textContent =
-        `${menos ? 'menos' : 'más'} que ${formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo)}`;
+        `${menos ? 'menos' : 'más'} que ${contraTotal ? 'todo ' : ''}${mesBase}`;
 
     document.getElementById('ritmo-monto').textContent =
         `${formatARS(Math.abs(ritmo.delta))} ${menos ? 'menos' : 'más'}`;
 
     // El ciclo en curso va en presente ("llevás"); uno ya cerrado, en pasado.
-    document.getElementById('ritmo-detalle').textContent = ritmo.enCurso
+    // Contra el total, la cifra que se lee es qué parte del mes base ya se
+    // consumió: "el 20% de septiembre" dice más que "80% menos" a día 3.
+    const parte = ritmo.anterior > 0
+        ? `, el ${Math.round(ritmo.actual / ritmo.anterior * 100)}% de`
+        : ', contra';
+    document.getElementById('ritmo-detalle').textContent = contraTotal
+        ? `Llevás ${formatARS(ritmo.actual)} en este ciclo${parte} los ` +
+          `${formatARS(ritmo.anterior)} que gastaste en todo ${mesBase}.`
+        : ritmo.enCurso
         ? `Llevás ${formatARS(ritmo.actual)} en este ciclo, contra ` +
-          `${formatARS(ritmo.anterior)} de ${formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo)} ` +
-          `en el mismo tramo.`
+          `${formatARS(ritmo.anterior)} de ${mesBase} en el mismo tramo.`
         : `Gastaste ${formatARS(ritmo.actual)} en ${formatearMesNombre(ritmo.mesPeriodo)}, contra ` +
-          `${formatARS(ritmo.anterior)} de ${formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo)}, ` +
-          `ciclo completo.`;
+          `${formatARS(ritmo.anterior)} de ${mesBase}, ciclo completo.`;
 
-    document.getElementById('ritmo-rango').textContent = ritmo.enCurso
+    document.getElementById('ritmo-rango').textContent = contraTotal
+        ? `día ${ritmo.dia} de ${ritmo.diasCiclo} · contra ${mesBase} completo`
+        : ritmo.enCurso
         ? `día ${ritmo.dia} de ${ritmo.diasCiclo}`
         : `ciclo completo · ${ritmo.diasCiclo} días`;
+}
+
+// Estado visual del conmutador "mismo día / mes completo". Con el mes
+// activo cerrado no hay nada que elegir (los dos modos coinciden), así que
+// se esconde en vez de ofrecer un botón que no cambia nada.
+function marcarModoRitmo(ritmo) {
+    const grupo = document.getElementById('ritmo-modos');
+    if (!grupo) return;
+    grupo.style.display = ritmo?.enCurso ? '' : 'none';
+    document.getElementById('ritmo-modo-dia')?.setAttribute('aria-pressed',   String(modoRitmo === 'dia'));
+    document.getElementById('ritmo-modo-total')?.setAttribute('aria-pressed', String(modoRitmo === 'total'));
 }
 
 // ----------------------------------------------------------------
@@ -519,7 +549,9 @@ function dibujarNotasComparacion(ritmo) {
         const menos = v.delta < 0;
         el.classList.add(menos ? 'es-menos' : 'es-mas');
 
-        const mes   = formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo);
+        // Contra el mes completo la base es el ciclo entero: "todo agosto".
+        const todo  = ritmo.modo === 'total' && ritmo.enCurso ? 'todo ' : '';
+        const mes   = todo + formatearMesNombre(ritmo.mesComparacion, ritmo.mesPeriodo);
         const texto = frase(v, menos, mes, ritmo.enCurso);
 
         // Entre paréntesis, el número contra el que se compara. Va a la
@@ -583,7 +615,7 @@ async function cambiarMesComparacion(mes) {
     if (!mesActivo) return;
 
     try {
-        const ritmo = await DB.obtenerRitmo(mesActivo, mesComparacion);
+        const ritmo = await DB.obtenerRitmo(mesActivo, mesComparacion, modoRitmo);
         dibujarRitmo(ritmo, datosActuales?.meses || []);
         // Las notas de USD y de movimientos comparan contra el mismo mes,
         // así que se mueven con el selector.
@@ -593,6 +625,21 @@ async function cambiarMesComparacion(mes) {
         console.error('Error al comparar meses:', err);
         mostrarError('No se pudo comparar contra ese mes.');
     }
+}
+
+// Cambiar la vara (mismo día / mes completo) recalcula lo mismo que el
+// selector de mes: el panel de ritmo y las notas de los KPI.
+function cambiarModoRitmo(modo) {
+    if (modo === modoRitmo) return;
+    modoRitmo = modo;
+    try { localStorage.setItem('modoRitmo', modo); } catch (_) { /* sin storage: vale para esta visita */ }
+    marcarModoRitmo(datosActuales?.ritmo);
+    cambiarMesComparacion(mesComparacion);
+}
+
+function leerModoRitmo() {
+    try { return localStorage.getItem('modoRitmo') === 'total' ? 'total' : 'dia'; }
+    catch (_) { return 'dia'; }
 }
 
 // ----------------------------------------------------------------
@@ -1492,6 +1539,8 @@ function bindEventos() {
     document.getElementById('ritmo-vs')?.addEventListener('change', (e) => {
         cambiarMesComparacion(e.target.value);
     });
+    document.getElementById('ritmo-modo-dia')?.addEventListener('click',   () => cambiarModoRitmo('dia'));
+    document.getElementById('ritmo-modo-total')?.addEventListener('click', () => cambiarModoRitmo('total'));
 
     // Modal de evolución histórica
     document.getElementById('btn-ver-evolucion')?.addEventListener('click', abrirEvolucion);
@@ -1632,7 +1681,7 @@ async function manejarSubidaArchivo(evento) {
 
         movimientosPendientes = movimientos;
         mesesConDataActual    = await DB.obtenerMeses();
-        mostrarConfirmacionImport(movimientos[0].mes_periodo);
+        mostrarConfirmacionImport();
         // El botón queda deshabilitado hasta que se confirme o cancele
 
     } catch (err) {
@@ -1646,12 +1695,46 @@ async function manejarSubidaArchivo(evento) {
 // ----------------------------------------------------------------
 // SUBIDA DE ARCHIVO — paso 2: modal de confirmación
 // ----------------------------------------------------------------
-function mostrarConfirmacionImport(mesDetectado) {
+// Meses que trae el import pendiente, del más viejo al más nuevo, con su
+// cantidad de filas. El parser ya asignó cada fila a su ciclo.
+function mesesDelImport() {
+    const conteo = {};
+    (movimientosPendientes || []).forEach(m => {
+        conteo[m.mes_periodo] = (conteo[m.mes_periodo] || 0) + 1;
+    });
+    return Object.keys(conteo).sort().map(mes => ({ mes, cantidad: conteo[mes] }));
+}
+
+function mostrarConfirmacionImport() {
     const input    = document.getElementById('import-select-mes');
     const cantidad = document.getElementById('import-cantidad');
+    const desglose = document.getElementById('import-desglose');
+    const meses    = mesesDelImport();
+    const varios   = meses.length > 1;
 
-    input.value = mesDetectado;
     cantidad.textContent = movimientosPendientes.length;
+
+    // Con un solo mes se puede corregir a mano, como siempre. Con dos, forzar
+    // uno volvería a mezclar los ciclos, así que no se ofrece.
+    input.style.display = varios ? 'none' : '';
+    document.getElementById('import-instruccion').textContent = varios
+        ? 'El archivo trae dos ciclos; cada movimiento va al suyo:'
+        : 'Seleccioná el mes al que pertenece este resumen:';
+    input.value = meses[0]?.mes || '';
+
+    desglose.innerHTML = '';
+    desglose.style.display = varios ? '' : 'none';
+    if (varios) {
+        meses.forEach(({ mes, cantidad: n }) => {
+            const li = document.createElement('li');
+            const reemplaza = mesesConDataActual.includes(mes) ? ' · reemplaza lo cargado' : ' · mes nuevo';
+            li.innerHTML = `<strong></strong><span></span>`;
+            const nombre = formatearMesNombre(mes);
+            li.querySelector('strong').textContent = nombre.charAt(0).toUpperCase() + nombre.slice(1);
+            li.querySelector('span').textContent   = ` ${n} movimientos${reemplaza}`;
+            desglose.appendChild(li);
+        });
+    }
 
     actualizarAdvertenciaImport();
     input.oninput = actualizarAdvertenciaImport;
@@ -1662,22 +1745,28 @@ function mostrarConfirmacionImport(mesDetectado) {
 function actualizarAdvertenciaImport() {
     const mesSel     = document.getElementById('import-select-mes').value;
     const adv        = document.getElementById('import-advertencia');
-    if (mesesConDataActual.includes(mesSel)) {
+    // Con dos meses el desglose ya dice cuáles se reemplazan.
+    if (mesesDelImport().length > 1) {
+        adv.style.display = 'none';
+    } else if (mesesConDataActual.includes(mesSel)) {
         adv.querySelector('.import-adv-mes').textContent = formatearMes(mesSel);
         adv.style.display = 'flex';
     } else {
         adv.style.display = 'none';
     }
 
-    // Aviso extra si el mes destino abarca dos cierres de tarjeta
+    // Aviso extra si algún mes destino abarca dos cierres de tarjeta
     const col = document.getElementById('import-colision');
     if (col && typeof Ciclos !== 'undefined' && mesSel) {
-        const cierre  = Ciclos.cierreDe(`${mesSel}-15`);
-        const colision = cierre && Ciclos.hayColision(cierre);
-        if (colision) {
-            document.getElementById('import-colision-mes').textContent = formatearMes(mesSel);
+        const destinos = mesesDelImport().length > 1 ? mesesDelImport().map(x => x.mes) : [mesSel];
+        const mesColision = destinos.find(mes => {
+            const cierre = Ciclos.cierreDe(`${mes}-15`);
+            return cierre && Ciclos.hayColision(cierre);
+        });
+        if (mesColision) {
+            document.getElementById('import-colision-mes').textContent = formatearMes(mesColision);
         }
-        col.style.display = colision ? 'flex' : 'none';
+        col.style.display = mesColision ? 'flex' : 'none';
     }
 }
 
@@ -1689,7 +1778,11 @@ async function confirmarImportacion() {
     btnConfirmar.textContent  = 'Importando...';
 
     try {
-        movimientosPendientes.forEach(m => { m.mes_periodo = mesSeleccionado; });
+        // El mes elegido a mano sólo se aplica cuando el archivo es de un
+        // único ciclo; con dos, cada fila ya trae el suyo del parser.
+        if (mesesDelImport().length === 1) {
+            movimientosPendientes.forEach(m => { m.mes_periodo = mesSeleccionado; });
+        }
 
         const resultado = await DB.importarMovimientos(movimientosPendientes);
 

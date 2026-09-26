@@ -180,8 +180,14 @@
           <div class="ritmo-encabezado">
             <span class="titulo-kpi">Ritmo de gasto</span>
             <strong class="ritmo-monto" id="ritmo-monto">—</strong>
-            <select id="ritmo-vs" class="ritmo-select"
-                    title="Comparar contra otro mes" aria-label="Mes de comparación"></select>
+            <div class="ritmo-controles">
+              <div class="ritmo-modos" id="ritmo-modos" role="group" aria-label="Cómo comparar">
+                <button type="button" class="ritmo-modo" id="ritmo-modo-dia" aria-pressed="true">Mismo día</button>
+                <button type="button" class="ritmo-modo" id="ritmo-modo-total" aria-pressed="false">Mes completo</button>
+              </div>
+              <select id="ritmo-vs" class="ritmo-select"
+                      title="Comparar contra otro mes" aria-label="Mes de comparación"></select>
+            </div>
           </div>
 
           <div class="ritmo-detalle" id="ritmo-detalle">—</div>
@@ -455,9 +461,13 @@
       <div class="import-confirm-body">
         <p class="import-info">
           Se encontraron <strong id="import-cantidad">—</strong> movimientos.
-          Seleccioná el mes al que pertenece este resumen:
+          <span id="import-instruccion">Seleccioná el mes al que pertenece este resumen:</span>
         </p>
         <input type="month" id="import-select-mes" class="import-mes-select">
+        <!-- Cuando el archivo trae dos ciclos (el feed sigue mostrando el
+             recién cerrado unos días) no hay un mes que elegir: se lista
+             cuántos movimientos van a cada uno. -->
+        <ul id="import-desglose" class="import-desglose" style="display:none;"></ul>
         <div id="import-advertencia" class="import-advertencia" style="display:none;">
           <span>⚠️</span>
           <span><strong class="import-adv-mes"></strong> ya tiene datos — serán reemplazados por este archivo.</span>

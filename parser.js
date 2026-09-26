@@ -143,14 +143,27 @@ const Parser = (() => {
     }
 
     // ----------------------------------------------------------------
-    // Sobreescribir mes_periodo de todas las filas con el mes de liquidación.
-    // Esto asegura que las cuotas (cuya fecha es la de compra original, no
-    // la del resumen) queden asignadas al mes correcto de facturación.
+    // Asignar a cada fila el mes de liquidación (ciclo de facturación).
     //
     // El resumen cierra cada 4 semanas en jueves, no por mes calendario, así
-    // que el mes se deriva del CICLO DE FACTURACIÓN (ver ciclos.js) al que
-    // pertenece el movimiento más reciente del archivo — el más reciente y no
-    // la moda, porque las cuotas viejas arrastran fechas de meses anteriores.
+    // que el mes sale del CICLO (ver ciclos.js). Un archivo puede traer DOS
+    // ciclos: el feed "Últimos movimientos" sigue mostrando el ciclo recién
+    // cerrado varios días después del cierre (el export del 26-Sep traía
+    // todo 27-Ago→23-Sep más los primeros días del ciclo nuevo). Etiquetar
+    // todo el archivo con el ciclo de la fecha más reciente, como se hacía
+    // antes, metía el mes cerrado entero dentro del mes nuevo.
+    //
+    // Reglas, por fila:
+    //  - El ciclo PRINCIPAL del archivo es el que tiene más movimientos
+    //    propios (con monto, sin contar cuotas arrastradas).
+    //  - Una fila del ciclo principal o de uno posterior va a su ciclo.
+    //  - Una fila con fecha anterior al principal es un movimiento que el
+    //    banco asentó tarde: se factura en el principal.
+    //  - Una cuota arrastrada (cuota > 1) lleva la fecha de la compra
+    //    original, así que la fecha no dice nada: va al principal. Verificado
+    //    en los feeds: mientras el ciclo viejo sigue a la vista, las cuotas
+    //    que muestra son las de ese resumen (C.17/18 en septiembre, cuando
+    //    agosto había facturado C.16/18).
     //
     // `Ciclos` puede no estar cargado (parser usado en un arnés headless):
     // en ese caso cae al criterio anterior, el mes más frecuente.
@@ -159,12 +172,26 @@ const Parser = (() => {
         if (!filas.length) return;
 
         if (typeof Ciclos !== 'undefined') {
-            // Movimiento más reciente = el ciclo que este archivo representa.
-            const ultima = filas.reduce((max, m) =>
-                (m.fecha && m.fecha > max) ? m.fecha : max, '');
-            const periodo = ultima ? Ciclos.periodoDe(ultima) : null;
-            if (periodo) {
-                filas.forEach(m => { m.mes_periodo = periodo; });
+            const esArrastre = m => m.cuota_actual > 1;
+            const tieneMonto = m => (m.monto_ars || 0) !== 0 || (m.monto_usd || 0) !== 0;
+
+            const conteo = {};
+            filas.forEach(m => {
+                if (!m.fecha || esArrastre(m) || !tieneMonto(m)) return;
+                const p = Ciclos.periodoDe(m.fecha);
+                if (p) conteo[p] = (conteo[p] || 0) + 1;
+            });
+            // Empate → el más nuevo ('YYYY-MM' ordena como fecha).
+            const principal = Object.keys(conteo)
+                .sort((a, b) => conteo[b] - conteo[a] || (a < b ? 1 : -1))[0];
+
+            if (principal) {
+                filas.forEach(m => {
+                    const propio = m.fecha ? Ciclos.periodoDe(m.fecha) : null;
+                    m.mes_periodo = (esArrastre(m) || !propio || propio < principal)
+                        ? principal
+                        : propio;
+                });
                 return;
             }
         }
