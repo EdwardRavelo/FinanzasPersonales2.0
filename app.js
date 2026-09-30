@@ -1213,7 +1213,7 @@ function dibujarEvoRitmo() {
 
     const encabezado = rh.enCurso
         ? `Cuánto llevaba gastado cada ciclo a su día ${rh.dia} de ${rh.diasCiclo}, que es la altura en la que está ${formatearMes(rh.mesActivo)} hoy.`
-        : `Consumo de cada ciclo completo (${rh.diasCiclo} días).`;
+        : 'Consumo de cada ciclo completo.';
 
     nota.textContent = `${encabezado} La línea punteada marca ${formatearMes(rh.mesActivo)}: ` +
         `${formatARS(rh.base)}. Incluye las cuotas que factura cada ciclo; los créditos quedan afuera.`;
@@ -1766,20 +1766,6 @@ function actualizarAdvertenciaImport() {
         adv.style.display = 'flex';
     } else {
         adv.style.display = 'none';
-    }
-
-    // Aviso extra si algún mes destino abarca dos cierres de tarjeta
-    const col = document.getElementById('import-colision');
-    if (col && typeof Ciclos !== 'undefined' && mesSel) {
-        const destinos = mesesDelImport().length > 1 ? mesesDelImport().map(x => x.mes) : [mesSel];
-        const mesColision = destinos.find(mes => {
-            const cierre = Ciclos.cierreDe(`${mes}-15`);
-            return cierre && Ciclos.hayColision(cierre);
-        });
-        if (mesColision) {
-            document.getElementById('import-colision-mes').textContent = formatearMes(mesColision);
-        }
-        col.style.display = mesColision ? 'flex' : 'none';
     }
 }
 

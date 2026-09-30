@@ -472,14 +472,6 @@
           <span>⚠️</span>
           <span><strong class="import-adv-mes"></strong> ya tiene datos — serán reemplazados por este archivo.</span>
         </div>
-        <!-- Sólo aparece cuando dos cierres caen en el mismo mes calendario
-             (pasa ~1 vez al año): ahí el mes guarda DOS resúmenes distintos
-             y reemplazarlo borraría el otro. -->
-        <div id="import-colision" class="import-advertencia" style="display:none;">
-          <span>⚠️</span>
-          <span><strong id="import-colision-mes"></strong> contiene dos cierres de tarjeta, así que
-            guarda dos resúmenes distintos. Importar acá reemplaza <em>los dos</em>.</span>
-        </div>
         <div class="import-acciones">
           <button id="btn-confirmar-import" class="btn-accion" onclick="confirmarImportacion()">
             Importar

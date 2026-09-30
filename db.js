@@ -316,22 +316,27 @@ const DB = (() => {
         const mesBase = Ciclos.periodoDe(Ciclos.rangoDe(cierreBase).desde);
         if (!mesBase || mesBase === mesPeriodo) return null;
 
-        const diaPropio = Ciclos.diaDelCiclo(cierre);
+        const diaPropio  = Ciclos.diaDelCiclo(cierre);
         if (diaPropio < 1) return null;         // ciclo futuro: nada que comparar
-        const enCurso = diaPropio < Ciclos.DIAS_CICLO;
+        // Los ciclos miden 28 o 35 días, así que "cerrado" es haber llegado
+        // al largo de ESTE ciclo, no a un número fijo.
+        const largoPropio = Ciclos.diasDelCiclo(cierre);
+        const enCurso     = diaPropio < largoPropio;
 
         // Día de corte. Con el mes activo abierto es su día de hoy. Con el
         // mes activo cerrado, 'dia' corta los dos ciclos en el día que va
         // hoy el ciclo en curso ("al día 3, septiembre llevaba…"), para que
         // el modo signifique algo distinto de 'total', que los compara
-        // enteros. El día de cierre cierreVigente() da el día 28: completo.
+        // enteros. El día de cierre cierreVigente() da el último día: completo.
         const dia = enCurso || modo === 'total'
             ? diaPropio
-            : Ciclos.diaDelCiclo(Ciclos.cierreVigente()) || Ciclos.DIAS_CICLO;
+            : Ciclos.diaDelCiclo(Ciclos.cierreVigente()) || largoPropio;
 
         const corteActual = Ciclos.corteDelCiclo(cierre, dia);
-        const corteBase   = Ciclos.corteDelCiclo(cierreBase,
-            modo === 'total' ? Ciclos.DIAS_CICLO : dia);
+        // 'total' toma la base entera, sea de 28 o de 35 días.
+        const corteBase   = modo === 'total'
+            ? Ciclos.rangoDe(cierreBase).hasta
+            : Ciclos.corteDelCiclo(cierreBase, dia);
         const inicioActual = Ciclos.rangoDe(cierre).desde;
         const inicioBase   = Ciclos.rangoDe(cierreBase).desde;
 
@@ -405,7 +410,7 @@ const DB = (() => {
             enCurso,
             modo,
             dia,
-            diasCiclo:   Ciclos.DIAS_CICLO,
+            diasCiclo:   largoPropio,
             // Campos planos de pesos: los consume el panel de ritmo, que ya
             // estaba escrito contra ellos.
             actual:   a.ars,
@@ -442,6 +447,8 @@ const DB = (() => {
 
         const dia = Ciclos.diaDelCiclo(cierreActivo);
         if (dia < 1) return null;
+        const largo   = Ciclos.diasDelCiclo(cierreActivo);
+        const enCurso = dia < largo;
 
         const { data, error } = await supabase
             .from('movimientos')
@@ -452,6 +459,9 @@ const DB = (() => {
         if (error) throw error;
 
         // Cada ciclo tiene su propio corte, `dia` días después de su inicio.
+        // Con el mes activo cerrado se comparan ciclos completos: cortar
+        // todos en el largo del activo dejaría afuera la última semana de
+        // los de 35 días cuando el activo mide 28.
         // Se cachea por mes para no recalcular el calendario fila por fila.
         const cortes = {};
         const acum   = {};
@@ -461,7 +471,8 @@ const DB = (() => {
             if (!(mes in cortes)) {
                 const c     = Ciclos.cierreDePeriodo(mes);
                 cortes[mes] = c
-                    ? { inicio: Ciclos.rangoDe(c).desde, corte: Ciclos.corteDelCiclo(c, dia) }
+                    ? { inicio: Ciclos.rangoDe(c).desde,
+                        corte:  enCurso ? Ciclos.corteDelCiclo(c, dia) : Ciclos.rangoDe(c).hasta }
                     : null;
                 acum[mes]   = 0;
             }
@@ -482,8 +493,8 @@ const DB = (() => {
         return {
             mesActivo,
             dia,
-            diasCiclo: Ciclos.DIAS_CICLO,
-            enCurso:   dia < Ciclos.DIAS_CICLO,
+            diasCiclo: largo,
+            enCurso,
             base,
             meses: Object.keys(acum).sort().map(mes => ({
                 mes,

@@ -145,12 +145,11 @@ const Parser = (() => {
     // ----------------------------------------------------------------
     // Asignar a cada fila el mes de liquidación (ciclo de facturación).
     //
-    // El resumen cierra cada 4 semanas en jueves, no por mes calendario, así
+    // El resumen cierra un jueves cerca de fin de mes, no el último día, así
     // que el mes sale del CICLO (ver ciclos.js). Un archivo puede traer DOS
-    // ciclos: el feed "Últimos movimientos" sigue mostrando el ciclo recién
-    // cerrado varios días después del cierre (el export del 26-Sep traía
-    // todo 27-Ago→23-Sep más los primeros días del ciclo nuevo). Etiquetar
-    // todo el archivo con el ciclo de la fecha más reciente, como se hacía
+    // ciclos: el feed "Últimos movimientos" puede seguir mostrando el ciclo
+    // recién cerrado junto con los primeros días del nuevo. Etiquetar todo
+    // el archivo con el ciclo de la fecha más reciente, como se hacía
     // antes, metía el mes cerrado entero dentro del mes nuevo.
     //
     // Reglas, por fila:
