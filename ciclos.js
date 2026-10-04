@@ -24,6 +24,10 @@
 // los dos documentos del banco: el resumen cerrado el 30-Jul lista
 // movimientos del 25 y 28 de julio pero ninguno del 30, y el feed
 // "Últimos Movimientos" del ciclo nuevo arranca justamente el 30-Jul.
+// Es una aproximación: el corte es a alguna HORA del día del cierre. El
+// resumen cerrado el 01-Oct trae un SUBE del 01-Oct y todos los impuestos
+// del cierre fechados ese día. Por eso el import de un PDF no reparte por
+// fecha: el resumen entero va a su mes (ver normalizarMesPeriodo).
 //
 // mes_periodo es el mes del resumen ('2026-06' para el que cierra el
 // 02-Jul), así que cada mes tiene exactamente un ciclo: no hay meses
@@ -43,6 +47,7 @@ const Ciclos = (() => {
         '2026-07': '2026-07-30',
         '2026-08': '2026-08-27',
         '2026-09': '2026-10-01',
+        '2026-10': '2026-10-29',   // PRÓXIMO CIERRE del resumen de septiembre
     };
 
     // ----------------------------------------------------------------
@@ -182,6 +187,8 @@ const Ciclos = (() => {
         '2026-07-02': '2026-07-13',
         '2026-07-30': '2026-08-07',
         '2026-08-27': '2026-09-07',
+        '2026-10-01': '2026-10-09',
+        '2026-10-29': '2026-11-11',
     };
 
     function vencimientoDe(cierreISO) {

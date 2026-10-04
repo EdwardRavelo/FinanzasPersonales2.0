@@ -14,6 +14,7 @@ const Parser = (() => {
         /^IVA SERV\.DIGITAL/i,
         /^IVA RG/i,
         /^INTERESES FINANCIACION/i,
+        /^INTERES ADELANTO/i,
         /^PERC\. IB SERV\. DIGITALES/i,
         /^PERCEPCI[OÓ]N AFIP/i,
         /^IIBB PERCEP/i,
@@ -30,6 +31,15 @@ const Parser = (() => {
         /^CR\. RG/i,
         /^CR\.RG/i,
         /^CR PESOS P\/DEVOLUCION/i,
+    ];
+
+    // Líneas sin cupón que SON movimientos pero no cargos bancarios: el
+    // adelanto en efectivo es plata que salió de la tarjeta, así que entra
+    // sin categoría para que el usuario la clasifique. El resumen de
+    // septiembre 2026 traía "ADELANTO TRANSFERENCIA 150.000,00" y sin este
+    // patrón la guarda de parsearCargoSinCuponPDF() lo descartaba.
+    const PATRONES_SIN_CUPON_SIN_CATEGORIA = [
+        /^ADELANTO/i,
     ];
 
     // ----------------------------------------------------------------
@@ -164,10 +174,16 @@ const Parser = (() => {
     //    que muestra son las de ese resumen (C.17/18 en septiembre, cuando
     //    agosto había facturado C.16/18).
     //
+    // `unSoloCiclo` es para el resumen PDF: es un ciclo cerrado por
+    // definición, así que TODAS sus filas van al principal. Las que llevan
+    // la fecha del día del cierre (los impuestos del cierre, y compras
+    // asentadas antes del corte de ese día) pertenecen a ese resumen aunque
+    // el calendario ponga el día del cierre en el ciclo siguiente.
+    //
     // `Ciclos` puede no estar cargado (parser usado en un arnés headless):
     // en ese caso cae al criterio anterior, el mes más frecuente.
     // ----------------------------------------------------------------
-    function normalizarMesPeriodo(filas) {
+    function normalizarMesPeriodo(filas, { unSoloCiclo = false } = {}) {
         if (!filas.length) return;
 
         if (typeof Ciclos !== 'undefined') {
@@ -187,7 +203,7 @@ const Parser = (() => {
             if (principal) {
                 filas.forEach(m => {
                     const propio = m.fecha ? Ciclos.periodoDe(m.fecha) : null;
-                    m.mes_periodo = (esArrastre(m) || !propio || propio < principal)
+                    m.mes_periodo = (unSoloCiclo || esArrastre(m) || !propio || propio < principal)
                         ? principal
                         : propio;
                 });
@@ -380,31 +396,41 @@ const Parser = (() => {
         const monto = parsearMontoPDF(montos[montos.length - 1]);
         if (monto === null) return null;
 
-        const nombre = resto
-            .replace(/\s*-?[\d.]+,\d{2}\s*$/, '')  // quitar el importe final
-            .replace(/\([^)]*\)/g, '')             // quitar la base imponible
-            .replace(/\s*[\d.,]+%\s*$/, '')        // quitar la alícuota
+        // Se quitan TODOS los importes, no sólo el final: "DB IVA $ 21% 2.182,19
+        // 458,26" trae la base suelta y el nombre salía con el número, distinto
+        // cada mes. La base entre paréntesis a veces llega sin el cierre. Lo
+        // que queda colgando al final (alícuota, "%" o "$" sueltos) se pela
+        // en un bucle porque una cosa tapa a la otra ("DB IVA $ 21%").
+        let nombre = resto
+            .replace(/\(.*?(?:\)|$)/g, ' ')        // quitar la base imponible
+            .replace(/-?[\d.]+,\d{2}/g, ' ')       // quitar importes y bases
             .replace(/\s+/g, ' ')
             .trim();
+        for (let previo = null; previo !== nombre; ) {
+            previo = nombre;
+            nombre = nombre.replace(/(?:\s+[\d.,]*%|\s*[$%])$/, '').trim();
+        }
 
         // Guarda: sólo aceptamos líneas que reconocemos como cargo o crédito
         // bancario. Sin esto, cualquier texto legal del resumen que termine en
         // un número entraría como movimiento.
         if (!nombre) return null;
-        if (!esCargoBancario(nombre) && !esCreditoBancario(nombre)) return null;
+        const sinCategoria = PATRONES_SIN_CUPON_SIN_CATEGORIA.some(p => p.test(nombre));
+        if (!sinCategoria && !esCargoBancario(nombre) && !esCreditoBancario(nombre)) return null;
 
         return {
             fecha,
             mes_periodo:    mesPeriodo(fecha),
             comercio_crudo: nombre,
             comercio:       null,
-            categoria:      'Cargos Bancarios',
+            categoria:      sinCategoria ? null : 'Cargos Bancarios',
             cuota_actual:   null,
             cuota_total:    null,
             monto_ars:      monto,
             monto_usd:      null,
             es_reintegro:   monto < 0,
             archivo_origen: nombreArchivo,
+            sinCupon:       true,
         };
     }
 
@@ -437,7 +463,10 @@ const Parser = (() => {
         }
 
         // Transacción normal: buscar número de cupón (exactamente 6 dígitos)
-        const voucherMatch = resto.match(/\b(\d{6})\b/);
+        // Seis dígitos seguidos de ",dd" son un importe, no un cupón: la base
+        // de "DB.RG 5617 30% ( 129749,01 ) 38.924,70" se tomaba como cupón y
+        // el nombre quedaba "DB.RG 5617 30% (".
+        const voucherMatch = resto.match(/\b(\d{6})\b(?!,\d)/);
 
         // Impuestos, percepciones y créditos no llevan cupón. Vienen como
         // "IIBB PERCEP-CABA 2,00%( 7749,28) 154,98" o "CR.RG 5617 30% M -8.147,80":
@@ -520,7 +549,12 @@ const Parser = (() => {
 
         const resultados   = [];
         const cargosVistos = new Set();
-        const FECHA_RE     = /^(\d{2})-([A-Za-z]{3})-(\d{2,4}) (.*)/;
+        // El token opcional del principio es el código de barras que el banco
+        // imprime en algunas páginas ("Ëilm~l£gÌ"): cae a la misma altura que
+        // un renglón, se agrupa con él y la fecha deja de ser lo primero. Así
+        // se perdía una compra del resumen de septiembre 2026. No puede
+        // empezar con dígito, para no comerse un día.
+        const FECHA_RE     = /^(?:[^\d\s]\S*\s+)?(\d{2})-([A-Za-z]{3})-(\d{2,4}) (.*)/;
 
         // La página 1 es la portada-resumen, pero ahí el banco lista créditos
         // (ej. "CR.RG 5617 30% M -8.147,80") que no se repiten en el detalle.
@@ -567,24 +601,26 @@ const Parser = (() => {
                 const mov = parsearRestoFilaPDF(resto.trim(), fecha, file.name);
                 if (!mov) continue;
 
-                // De la portada sólo aceptamos cargos y créditos bancarios.
-                if (n === 1 && mov.categoria !== 'Cargos Bancarios') continue;
+                // De la portada sólo aceptamos las líneas sin cupón reconocidas
+                // (cargos, créditos y adelantos).
+                if (n === 1 && !mov.sinCupon) continue;
 
                 // Los cargos sin cupón no tienen identificador propio: si el
                 // mismo aparece en la portada y en el detalle, lo contaríamos
                 // dos veces. Las compras normales sí pueden repetirse legítimamente
                 // (mismo comercio y monto el mismo día), y llevan cupón distinto.
-                if (mov.categoria === 'Cargos Bancarios') {
+                if (mov.sinCupon) {
                     const clave = `${mov.fecha}|${mov.comercio_crudo}|${mov.monto_ars}`;
                     if (cargosVistos.has(clave)) continue;
                     cargosVistos.add(clave);
                 }
 
+                delete mov.sinCupon;
                 resultados.push(mov);
             }
         }
 
-        normalizarMesPeriodo(resultados);
+        normalizarMesPeriodo(resultados, { unSoloCiclo: true });
         return resultados;
     }
 
@@ -593,6 +629,29 @@ const Parser = (() => {
     // Retorna Promise<Array<Movimiento>>
     // ----------------------------------------------------------------
     async function parsearArchivo(file) {
+        return numerarRepetidas(await parsearArchivoSinNumerar(file));
+    }
+
+    // ----------------------------------------------------------------
+    // Filas idénticas dentro de un mismo archivo
+    //
+    // Dos compras pueden coincidir en fecha, comercio, monto y cuota: en
+    // septiembre 2026 hubo dos MERCADOLIBRE C.01/06 de 4.466,27 el 25-Sep
+    // (una cancelada y devuelta, la otra confirmada). El PDF las distingue
+    // por cupón; el XLSX no trae cupón. `ocurrencia` (1, 2, …) las numera
+    // para que el índice único de la base no rechace la segunda.
+    // ----------------------------------------------------------------
+    function numerarRepetidas(filas) {
+        const vistas = {};
+        filas.forEach(m => {
+            const clave = [m.fecha, m.comercio_crudo, m.monto_ars, m.monto_usd, m.cuota_actual].join('|');
+            vistas[clave] = (vistas[clave] || 0) + 1;
+            m.ocurrencia  = vistas[clave];
+        });
+        return filas;
+    }
+
+    async function parsearArchivoSinNumerar(file) {
         if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
             return parsearPDF(file);
         }

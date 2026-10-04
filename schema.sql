@@ -29,6 +29,11 @@ CREATE TABLE IF NOT EXISTS movimientos (
     -- Flags
     es_reintegro    BOOLEAN DEFAULT false,   -- monto negativo (reembolso, OFF VISA GARPA)
 
+    -- 1, 2, … entre filas idénticas de un mismo archivo (misma fecha,
+    -- comercio, monto y cuota). Dos compras iguales el mismo día son
+    -- legítimas — el banco las distingue por cupón, que el XLSX no trae.
+    ocurrencia      SMALLINT NOT NULL DEFAULT 1,
+
     -- Metadata
     archivo_origen  TEXT,                    -- nombre del .xlsx importado
     created_at      TIMESTAMPTZ DEFAULT NOW(),
@@ -148,6 +153,12 @@ CREATE POLICY "categorias: usuario solo borra las suyas"
 -- Ejecutar en instancias existentes (migration):
 --   ALTER TABLE movimientos DROP CONSTRAINT IF EXISTS movimientos_user_id_fecha_comercio_crudo_monto_ars_monto_usd_key;
 --   DROP INDEX IF EXISTS movimientos_unique_idx;
+--
+-- Migración 2026-10 (columna ocurrencia; correr ANTES de desplegar el
+-- parser que la envía):
+--   ALTER TABLE movimientos ADD COLUMN IF NOT EXISTS ocurrencia SMALLINT NOT NULL DEFAULT 1;
+--   DROP INDEX IF EXISTS movimientos_unique_idx;
+--   (y después el CREATE UNIQUE INDEX de abajo)
 
 CREATE UNIQUE INDEX IF NOT EXISTS movimientos_unique_idx
     ON movimientos (
@@ -157,7 +168,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS movimientos_unique_idx
         comercio_crudo,
         COALESCE(monto_ars::text, ''),
         COALESCE(monto_usd::text, ''),
-        COALESCE(cuota_actual, 0)
+        COALESCE(cuota_actual, 0),
+        ocurrencia
     );
 
 -- ----------------------------------------------------------------
