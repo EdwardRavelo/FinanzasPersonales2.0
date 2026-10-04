@@ -1843,6 +1843,7 @@ async function abrirModalClasificar() {
                 <thead>
                     <tr>
                         <th>Nombre Original</th>
+                        <th style="text-align:right;">Monto</th>
                         <th>Nombre Limpio</th>
                         <th>Categoría</th>
                     </tr>
@@ -1850,10 +1851,21 @@ async function abrirModalClasificar() {
                 <tbody>`;
 
         pendientes.forEach(item => {
+            // Suma de los movimientos sin clasificar de ese comercio; si son
+            // varios, se aclara cuántos para que no se lea como una compra.
+            const montos = [
+                item.ars ? `<span class="monto-tabla">${formatARS(item.ars)}</span>` : '',
+                item.usd ? `<span class="monto-usd">u$s ${item.usd.toFixed(2)}</span>` : '',
+            ].filter(Boolean).join('<br>') || `<span style="color:var(--text-dim)">—</span>`;
+            const veces = item.cantidad > 1
+                ? `<br><span style="color:var(--text-muted); font-size:0.75rem;">${item.cantidad} movimientos</span>`
+                : '';
+
             html += `
                 <tr data-cruda="${item.cruda}">
                     <td class="fecha-col" style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
                         title="${item.cruda}">${item.cruda}</td>
+                    <td style="text-align:right; white-space:nowrap;">${montos}${veces}</td>
                     <td><input type="text" class="input-sugerencia" value="${item.limpia}"></td>
                     <td><select class="select-categoria">${opcionesCat}</select></td>
                 </tr>`;

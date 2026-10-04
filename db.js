@@ -604,18 +604,29 @@ const DB = (() => {
     async function obtenerPendientes() {
         const { data, error } = await supabase
             .from('movimientos')
-            .select('comercio_crudo')
+            .select('comercio_crudo, monto_ars, monto_usd')
             .eq('user_id', userId)
             .is('categoria', null);
 
         if (error) throw error;
 
-        // Deduplicar
-        const unicos = [...new Set(data.map(r => r.comercio_crudo))];
-        return unicos.map(crudo => ({
-            cruda: crudo,
-            limpia: limpiarNombreComercio(crudo),
-        }));
+        // Un comercio por fila, con lo que suman sus movimientos sin
+        // clasificar: la regla se guarda por comercio, así que el monto que
+        // importa es el de todo lo que va a recategorizar. Los más grandes
+        // primero, que son los que más mueven el donut.
+        const porComercio = new Map();
+        data.forEach(r => {
+            const p = porComercio.get(r.comercio_crudo)
+                || { cruda: r.comercio_crudo, ars: 0, usd: 0, cantidad: 0 };
+            p.ars      += r.monto_ars != null ? parseFloat(r.monto_ars) : 0;
+            p.usd      += r.monto_usd != null ? parseFloat(r.monto_usd) : 0;
+            p.cantidad += 1;
+            porComercio.set(r.comercio_crudo, p);
+        });
+
+        return [...porComercio.values()]
+            .sort((a, b) => b.ars - a.ars || b.usd - a.usd)
+            .map(p => ({ ...p, limpia: limpiarNombreComercio(p.cruda) }));
     }
 
     async function obtenerCategorias() {
